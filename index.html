@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Booking King</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+
+  <script>
+    // 部署時填入。本機開發可以改用網址參數覆寫：
+    //   ?apiBase=http://localhost:5001&googleClientId=xxx
+    window.__BOOKING_KING_API_BASE__ = '';
+    window.__GOOGLE_CLIENT_ID__ = '';
+  </script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="app" class="app"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

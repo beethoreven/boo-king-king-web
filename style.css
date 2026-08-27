@@ -1,0 +1,326 @@
+/*
+ * 設計 token 與共用元件樣式。
+ *
+ * 配色來自設計稿定案的方向：深色底 + 黃銅色點綴（C 的結構 + B 的配色）。
+ * 所有顏色一律走這裡的變數，不要在別處寫死色碼——之後要調色只改這一區。
+ */
+
+:root {
+  --bg: #14120f;
+  --surface: #1e1b17;      /* 卡片、彈起的區塊 */
+  --surface-2: #1a1713;    /* 輸入框等比背景略亮一階的表面 */
+  --border: #332d24;
+  --border-soft: #2a251e;
+
+  --ink: #ede8e0;
+  --ink-soft: #a79c8e;
+  --ink-faint: #8a8177;
+  --ink-disabled: #5c564c;
+
+  --accent: #c8975a;
+  --accent-soft: #2a2318;  /* 標籤底色 */
+  --on-accent: #14120f;
+
+  --danger: #d9705a;
+  --danger-soft: #2e1c17;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --pad: 18px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Noto Sans TC", system-ui, -apple-system, sans-serif;
+  /* iOS Safari 在輸入框聚焦時，字體小於 16px 會自動放大整個頁面。
+     這裡把基準設在 16px，輸入框也不低於它。 */
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+a { color: var(--accent); }
+a:hover { color: #e0b478; }
+
+/* ── 版面 ───────────────────────────────────────────────── */
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px var(--pad);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topbar__actions { display: flex; align-items: center; gap: 8px; }
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px var(--pad) 0;
+}
+
+.section__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+.spacer { flex-grow: 1; }
+
+/* ── 表單控制項 ─────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+
+.field__label { font-size: 12px; color: var(--ink-faint); }
+
+.field__hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+  min-height: 16px;
+}
+
+/* 破壞性操作的常駐警語（例如改 email 會影響登入） */
+.field__warn { font-size: 12px; color: var(--danger); }
+
+.select-wrap { position: relative; }
+
+.select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.select-wrap--disabled::after { border-color: var(--ink-disabled); }
+
+select, input[type="text"], input[type="number"], input[type="date"],
+input[type="time"], input[type="email"], textarea {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 40px 12px 18px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  font-family: inherit;
+}
+
+input[type="text"], input[type="number"], input[type="email"],
+input[type="date"], input[type="time"], textarea {
+  padding-right: 18px;
+}
+
+select:disabled, input:disabled, textarea:disabled {
+  color: var(--ink-disabled);
+  background: #17140f;
+  cursor: not-allowed;
+}
+
+select option { background: var(--surface); color: var(--ink); }
+
+/* 錯誤狀態：紅框 + 欄位右側的驚嘆號 */
+.field--error select,
+.field--error input,
+.field--error textarea { border-color: var(--danger); }
+
+.field__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* ── 按鈕 ───────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius);
+  padding: 15px 18px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn--primary { background: var(--accent); color: var(--on-accent); }
+.btn--primary:disabled { background: #4a4034; color: var(--ink-disabled); cursor: not-allowed; }
+
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn--small { padding: 8px 12px; font-size: 13px; font-weight: 500; }
+
+/* ── 標籤 ───────────────────────────────────────────────── */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 6px 13px;
+  border-radius: var(--radius-sm);
+}
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── 卡片與清單 ─────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+}
+
+.card--flat { background: var(--surface-2); }
+
+.list { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── 頁籤 ───────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 var(--pad);
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+
+.tab {
+  flex: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-faint);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── 狀態訊息 ───────────────────────────────────────────── */
+
+.empty, .loading {
+  padding: 40px var(--pad);
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 14px;
+}
+
+/* ── Toast ──────────────────────────────────────────────── */
+
+.toast-layer {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  width: calc(100% - 36px);
+  max-width: 420px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 18px;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: toast-in 0.18s ease-out;
+}
+
+.toast--error { border-color: var(--danger); color: var(--danger); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── 對話框 ─────────────────────────────────────────────── */
+
+.modal-layer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal__title { font-size: 16px; font-weight: 700; }
+.modal__body { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+.modal__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
