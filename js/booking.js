@@ -381,6 +381,6 @@ function endTime(start, hours) {
 
 function slotMessage(slot) {
   if (slot.is_full) return '本時段已額滿';
-  if (slot.taken > 0) return '本時段目前已有確認中的預約，您仍可登記候補';
+  if (slot.taken > 0) return `本時段目前已有 ${slot.taken} 組預約，您將排在第 ${slot.taken + 1} 序位`;
   return '本時段目前可進行預約';
 }

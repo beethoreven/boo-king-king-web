@@ -178,7 +178,8 @@ export function createAdminView() {
         field({ label: '訂金', control: el('input', { type: 'number', value: m.booking_cost ?? '', onInput: setNum('booking_cost') }) }),
       ]),
       el('div', { class: 'row' }, [
-        field({ label: '候補上限', control: el('input', { type: 'number', min: '0', value: m.waitlist_limit ?? 3, onInput: setNum('waitlist_limit') }) }),
+        field({ label: '序位上限', control: el('input', { type: 'number', min: '0', value: m.waitlist_limit ?? 3, onInput: setNum('waitlist_limit') }),
+          hint: '第 1 序位之外還能再排幾組' }),
         field({
           label: '狀態',
           control: select({ options: MMG_STATUS_OPTIONS, value: m.status, onChange: (v) => { m.status = v; }, ariaLabel: '劇本狀態' }),
