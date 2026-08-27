@@ -318,9 +318,111 @@ select option { background: var(--surface); color: var(--ink); }
 }
 
 .modal__title { font-size: 16px; font-weight: 700; }
-.modal__body { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+/* 對話框內文常常是多行（缺漏項目清單、預定者資料、主持人名單），
+   內容是用 \n 串起來的純文字，沒有這行就會全部摺成一行。 */
+.modal__body {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  white-space: pre-line;
+}
 .modal__actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: none; }
 }
+
+/* ── 清單項目（主持人／管理員介面共用） ─────────────────── */
+
+.list-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.list-item__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.list-item__title { font-size: 15px; font-weight: 700; }
+.list-item__meta { font-size: 13px; color: var(--ink-soft); }
+
+.list-item__links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.list-item__side { flex: none; display: flex; align-items: center; }
+
+.sep { color: var(--ink-disabled); }
+
+/* 看起來像連結、實際是按鈕——可點擊的東西要是 button，
+   鍵盤與螢幕閱讀器才操作得到。 */
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linklike:hover { color: #e0b478; }
+
+.status-chip {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.toolbar { flex-direction: row; align-items: center; gap: 10px; }
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pager__label { font-size: 12px; color: var(--ink-faint); }
+
+/* 已確認的列在畫面上變暗、不可再操作 */
+.list-item--done { opacity: 0.55; }
+
+/* 標籤上的移除鍵（主持人名單） */
+.tag__remove {
+  background: none;
+  border: none;
+  padding: 0 0 0 2px;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.tag__remove:hover { opacity: 1; }
+
+/* 勾選欄（是否已確認） */
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.checkline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.checkline input:disabled { cursor: not-allowed; opacity: 0.4; }
+
+textarea { resize: vertical; min-height: 72px; line-height: 1.6; }

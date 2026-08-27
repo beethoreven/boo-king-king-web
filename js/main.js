@@ -11,20 +11,18 @@ import { setUnauthorizedHandler } from './api.js';
 import { refreshStatus, logout, getUser, hasRole, renderGoogleButton } from './auth.js';
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
+import { createHostView } from './host.js';
+import { createAdminView } from './admin.js';
 
 const app = document.getElementById('app');
 
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
-  host: { label: '主持人介面', minRole: 2, build: () => placeholder('主持人介面') },
-  admin: { label: '管理員介面', minRole: 1, build: () => placeholder('管理員介面') },
+  host: { label: '主持人介面', minRole: 2, build: () => createHostView() },
+  admin: { label: '管理員介面', minRole: 1, build: () => createAdminView() },
 };
 
 let currentView = 'booking';
-
-function placeholder(name) {
-  return el('div', { class: 'empty' }, `${name}尚未實作`);
-}
 
 function brandIcon() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
