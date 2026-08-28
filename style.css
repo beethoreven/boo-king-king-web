@@ -469,14 +469,18 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 2px;
+  gap: 4px;
 }
 
+/* 欄位自己長滿整列，跟上面那排（日曆＋時分下拉）切齊。
+   固定寬度的話五格加起來只佔一半，右邊空一大塊，看起來像被壓扁的。
+   flex-basis 給 0 是關鍵：不從內容寬度起算，純粹按比例分剩餘空間，
+   五格才會等寬。 */
 .dt-row input.dt-input {
+  flex: 1 1 0;
   width: auto;
-  flex: none;
   text-align: center;
-  padding: 12px 2px;
+  padding: 12px 4px;
   -moz-appearance: textfield;
   min-width: 0;
 }
@@ -488,8 +492,8 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   margin: 0;
 }
 
-.dt-row input.dt-input--year { width: 64px; }
-.dt-row input.dt-input--short { width: 42px; }
+/* 年要放四位數，比其他格多分一點空間 */
+.dt-row input.dt-input--year { flex-grow: 1.6; }
 
 .dt-unit {
   color: var(--ink-faint);
@@ -497,3 +501,6 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   flex-shrink: 0;
   margin-right: 2px;
 }
+
+/* 最後一個單位（分）的右邊距會讓整排比上面那排短 2px，切齊時看得出來 */
+.dt-row .dt-unit:last-child { margin-right: 0; }
