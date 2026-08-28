@@ -513,3 +513,22 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   object-fit: contain;
   flex-shrink: 0;
 }
+
+/* 載入中的轉圈圈。用 border 做而不是動畫圖檔或 SVG：這種尺寸下差別看不
+   出來，而少一個要載的資源，在「正在等資源」的當下特別有意義。 */
+.loading { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}

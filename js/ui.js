@@ -32,6 +32,19 @@ export function el(tag, attrs = {}, children = []) {
   return node;
 }
 
+/**
+ * 載入中的提示。
+ *
+ * 每個畫面在資料回來之前都該顯示這個，而不是讓上一個畫面的內容留在原地、
+ * 或是先把空骨架掛上去——那兩種都會讓人以為「載完了，只是沒東西」。
+ */
+export function spinner(label = '載入中…') {
+  return el('div', { class: 'loading' }, [
+    el('div', { class: 'spinner', 'aria-hidden': 'true' }),
+    el('div', {}, label),
+  ]);
+}
+
 export function clear(node) {
   node.replaceChildren();
   return node;

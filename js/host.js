@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner } from './ui.js';
 import { hostMayConfirm } from './conflicts.js';
 
 const TABS = [
@@ -270,7 +270,7 @@ export function createHostView() {
     if (panel) root.append(panel);
 
     if (tab.loading) {
-      root.append(el('div', { class: 'loading' }, '載入中…'));
+      root.append(spinner());
       return;
     }
     if (!tab.items.length) {
@@ -283,6 +283,9 @@ export function createHostView() {
     if (pager) root.append(el('div', { class: 'section' }, pager));
   }
 
+  // 先畫一次再去要資料。少了這一行，root 會在整個載入期間是空的——
+  // 使用者看到的是一片空白，分不出「還在載」與「真的沒東西」。
+  render();
   loadAll();
   return root;
 }

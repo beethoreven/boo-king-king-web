@@ -21,7 +21,7 @@
  */
 
 import { api, ApiError } from './api.js';
-import { el, clear, toast, confirmDialog, alertDialog } from './ui.js';
+import { el, clear, toast, confirmDialog, alertDialog, spinner } from './ui.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
 const EMPTY_HOSTS = [null, null, null, null];
@@ -135,8 +135,13 @@ export function createBookingView() {
   const submitBtn = el('button', { class: 'btn btn--primary', onClick: submit }, '立即預約');
   const submitSection = el('div', { class: 'section', style: 'padding-bottom: 20px' }, [submitBtn]);
 
+  // 劇本清單還沒回來之前顯示這個。骨架是持久節點、建構當下就掛上去了，
+  // 不擋著的話會先看到一個空的劇本選單加上「場次」「選擇主持人」等空區塊，
+  // 那看起來像是載完了但沒有資料。
+  const loadingNode = spinner();
+
   root.append(
-    scriptSection, tagSection, slotSection, hostSection,
+    loadingNode, scriptSection, tagSection, slotSection, hostSection,
     el('div', { class: 'spacer' }), submitSection,
   );
 
@@ -155,6 +160,7 @@ export function createBookingView() {
     // key 是 `${slot}:${userId}`，值是錯誤訊息或 null（代表驗證過沒問題）
     hostChecked: new Map(),
     slot: null,         // 該時段的排隊狀況
+    loading: true,      // 劇本清單還在路上
     submitting: false,
     // 這次「送出預約」意圖的冪等鍵，只在真正送出時才產生（見 submit()）。
     // 日期、時間、主持人任何一項改變，都代表變成另一次意圖，必須清成
@@ -263,11 +269,14 @@ export function createBookingView() {
   // ── 載入與重設 ──────────────────────────────────────────────
 
   async function load() {
+    state.loading = true;
+    render();
     try {
       state.scripts = await api.get('/api/mmg');
     } catch (err) {
       toast(err.message, { error: true });
     }
+    state.loading = false;
     clear(scriptSelect);
     scriptSelect.append(el('option', { value: '' }, '請選擇劇本'));
     for (const s of state.scripts) {
@@ -483,6 +492,16 @@ export function createBookingView() {
    *   （即使是同一個字串）在部分瀏覽器會重置游標位置。
    */
   function render() {
+    loadingNode.hidden = !state.loading;
+    scriptSection.hidden = state.loading;
+    if (state.loading) {
+      tagSection.hidden = true;
+      slotSection.hidden = true;
+      hostSection.hidden = true;
+      submitSection.hidden = true;
+      return;
+    }
+
     if (scriptSelect.value !== String(state.mmgId)) scriptSelect.value = state.mmgId;
 
     const d = state.detail;
@@ -528,6 +547,8 @@ export function createBookingView() {
     submitBtn.textContent = state.submitting ? '送出中…' : '立即預約';
   }
 
+  // 先畫一次（此時 loading 為 true，只會顯示轉圈圈）再去要資料。
+  render();
   load();
   return root;
 }

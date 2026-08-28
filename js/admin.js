@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner } from './ui.js';
 import { adminMaySave } from './conflicts.js';
 
 const SECTIONS = [
@@ -141,7 +141,7 @@ export function createAdminView() {
 
   function renderMmgList() {
     const s = state.mmg;
-    if (s.loading) return el('div', { class: 'loading' }, '載入中…');
+    if (s.loading) return spinner();
     return el('div', { class: 'section' }, [
       el('div', { class: 'list' }, s.items.map((m) =>
         el('div', { class: 'card list-item' }, [
@@ -257,7 +257,7 @@ export function createAdminView() {
 
   function renderUsersList() {
     const s = state.users;
-    if (s.loading) return el('div', { class: 'loading' }, '載入中…');
+    if (s.loading) return spinner();
     return el('div', { class: 'section' }, [
       el('div', { class: 'list' }, s.items.map((u) =>
         el('div', { class: 'card list-item' }, [
@@ -338,7 +338,7 @@ export function createAdminView() {
 
   function renderBookingsList() {
     const b = state.bookings;
-    if (!b.tab) return el('div', { class: 'loading' }, '載入中…');
+    if (!b.tab) return spinner();
     const t = b.data[b.tab];
 
     const nodes = [
