@@ -40,6 +40,26 @@ const BOOKING_STATUS_OPTIONS = [
   { value: 'cancelled', label: '已取消' },
 ];
 
+// 新增時的空白資料。用函式而不是常數，因為裡面有陣列——共用同一個物件
+// 會讓上一次沒存檔的編輯殘留到下一次新增。
+const emptyMmg = () => ({
+  id: null, name: '', period: null, price: null, booking_cost: null,
+  players: '', waitlist_limit: 3, status: 'active',
+  gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
+});
+
+const emptyUser = () => ({
+  id: null, email: '', name: '', role: 3, status: 'active', line_id: '', phone: '',
+});
+
+const emptyBooking = () => ({
+  id: null, mmg_id: null, player_id: null,
+  session_date: '', session_time: '', status: 'gm_confirm',
+  deposit: 0, note: '',
+  gm_user_ids: [null, null, null, null],
+  gm_confirmed: [false, false, false, false],
+});
+
 const EMPTY_BOOKING_FILTERS = {
   mmg_name: '', player_name: '', session_date: '', session_time: '',
 };
@@ -127,14 +147,22 @@ export function createAdminView() {
 
   // ── 儲存 ────────────────────────────────────────────────
 
-  async function save(path, body, onDone) {
+  /** 新增走 POST、編輯走 PUT。只有編輯才有「無任何修改」這個結果。 */
+  async function save(path, body, onDone, { create = false } = {}) {
     try {
-      const r = await api.put(path, body);
-      toast(r.changed ? '已儲存' : '無任何修改');
+      const r = create ? await api.post(path, body) : await api.put(path, body);
+      toast(create ? '已新增' : (r.changed ? '已儲存' : '無任何修改'));
       onDone();
     } catch (err) {
-      await alertDialog({ title: '儲存失敗', body: err.message });
+      await alertDialog({ title: create ? '新增失敗' : '儲存失敗', body: err.message });
     }
+  }
+
+  /** 清單上方的「新增」列。三個頁籤共用。 */
+  function addBar(label, onClick) {
+    return el('div', { class: 'section toolbar' }, [
+      el('button', { class: 'btn btn--ghost btn--small', onClick }, label),
+    ]);
   }
 
   // ── 劇本管理 ────────────────────────────────────────────
@@ -142,7 +170,9 @@ export function createAdminView() {
   function renderMmgList() {
     const s = state.mmg;
     if (s.loading) return spinner();
-    return el('div', { class: 'section' }, [
+    return el('div', {}, [
+      addBar('＋ 新增劇本', () => { s.editing = emptyMmg(); render(); }),
+      el('div', { class: 'section' }, [
       el('div', { class: 'list' }, s.items.map((m) =>
         el('div', { class: 'card list-item' }, [
           el('div', { class: 'list-item__main' }, [
@@ -158,6 +188,7 @@ export function createAdminView() {
           ]),
         ]),
       )),
+      ]),
     ]);
   }
 
@@ -168,7 +199,7 @@ export function createAdminView() {
     const setNum = (k) => (e) => { m[k] = e.target.value === '' ? null : Number(e.target.value); };
 
     return el('div', { class: 'section' }, [
-      el('div', { class: 'section__label' }, `編輯劇本 #${m.id}`),
+      el('div', { class: 'section__label' }, m.id ? `編輯劇本 #${m.id}` : '新增劇本'),
       field({ label: '名稱', control: el('input', { type: 'text', value: m.name ?? '', onInput: setField('name') }) }),
       el('div', { class: 'row' }, [
         field({ label: '時長（小時）', control: el('input', { type: 'number', step: '0.1', value: m.period ?? '', onInput: setNum('period') }) }),
@@ -194,8 +225,11 @@ export function createAdminView() {
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
-          onClick: () => save(`/api/admin/mmg/${m.id}`, m, () => { s.editing = null; loadMmg(); }),
-        }, '儲存'),
+          onClick: () => save(
+            m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', m,
+            () => { s.editing = null; loadMmg(); }, { create: !m.id },
+          ),
+        }, m.id ? '儲存' : '新增'),
       ]),
     ]);
   }
@@ -258,7 +292,9 @@ export function createAdminView() {
   function renderUsersList() {
     const s = state.users;
     if (s.loading) return spinner();
-    return el('div', { class: 'section' }, [
+    return el('div', {}, [
+      addBar('＋ 新增使用者', () => { s.editing = emptyUser(); render(); }),
+      el('div', { class: 'section' }, [
       el('div', { class: 'list' }, s.items.map((u) =>
         el('div', { class: 'card list-item' }, [
           el('div', { class: 'list-item__main' }, [
@@ -273,6 +309,7 @@ export function createAdminView() {
           ]),
         ]),
       )),
+      ]),
     ]);
   }
 
@@ -283,7 +320,7 @@ export function createAdminView() {
     const setField = (k) => (e) => { u[k] = e.target.value; };
 
     return el('div', { class: 'section' }, [
-      el('div', { class: 'section__label' }, `編輯使用者 #${u.id}`),
+      el('div', { class: 'section__label' }, u.id ? `編輯使用者 #${u.id}` : '新增使用者'),
       field({
         label: 'Email（Google 登入帳號）',
         // 不重繪：這裡不需要。警語是常駐的，而「email 有沒有被改過」
@@ -291,7 +328,8 @@ export function createAdminView() {
         control: el('input', { type: 'email', value: u.email ?? '', onInput: setField('email') }),
         // 常駐紅字，不是只有改了才出現——這是不可逆的破壞性操作，
         // 使用者應該在動手之前就看到警告。
-        warn: '改動後該帳號將無法用原本的 Google 帳號登入，且對方無法自行修復',
+        // 只有既有帳號才警告。新增時還沒有人在用這個 email，沒有東西會壞。
+        warn: u.id ? '改動後該帳號將無法用原本的 Google 帳號登入，且對方無法自行修復' : null,
       }),
       field({ label: '姓名', control: el('input', { type: 'text', value: u.name ?? '', onInput: setField('name') }) }),
       el('div', { class: 'row' }, [
@@ -318,7 +356,7 @@ export function createAdminView() {
             //
             // 在這裡才比對，不在 render 時算：算在 render 就得靠每次
             // 輸入都重繪才會更新，而那正是會把使用者踢出輸入框的原因。
-            const emailChanged = u.email !== original.email;
+            const emailChanged = Boolean(original) && u.email !== original.email;
             if (emailChanged) {
               const ok = await confirmDialog({
                 title: '確認變更登入 Email',
@@ -327,9 +365,12 @@ export function createAdminView() {
               });
               if (!ok) return;
             }
-            save(`/api/admin/users/${u.id}`, u, () => { s.editing = null; loadUsers(); });
+            save(
+              u.id ? `/api/admin/users/${u.id}` : '/api/admin/users', u,
+              () => { s.editing = null; loadUsers(); }, { create: !u.id },
+            );
           },
-        }, '儲存'),
+        }, u.id ? '儲存' : '新增'),
       ]),
     ]);
   }
@@ -353,6 +394,15 @@ export function createAdminView() {
           class: 'btn btn--ghost btn--small',
           onClick: () => { b.filterOpen = !b.filterOpen; render(); },
         }, b.filterOpen ? '收起篩選器' : '篩選器'),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          // 新增場次要選預定者，而使用者清單是切到「使用者管理」才載的。
+          // 這裡順手載一次，不然那個下拉會是空的。
+          onClick: () => {
+            b.editing = emptyBooking();
+            if (!state.users.items.length) loadUsers(); else render();
+          },
+        }, '＋ 新增場次'),
       ]),
     ];
 
@@ -378,7 +428,7 @@ export function createAdminView() {
       ])));
     }
 
-    if (t.loading) { nodes.push(el('div', { class: 'loading' }, '載入中…')); return el('div', {}, nodes); }
+    if (t.loading) { nodes.push(spinner()); return el('div', {}, nodes); }
     if (!t.items.length) { nodes.push(el('div', { class: 'empty' }, '這個狀態目前沒有場次')); return el('div', {}, nodes); }
 
     nodes.push(el('div', { class: 'section' }, el('div', { class: 'list' }, t.items.map((item) =>
@@ -435,9 +485,42 @@ export function createAdminView() {
     const item = b.editing;
     const mmg = state.mmg.items.find((m) => m.id === item.mmg_id);
 
+    const isNew = !item.id;
+
     return el('div', { class: 'section' }, [
-      el('div', { class: 'section__label' }, `編輯場次 #${item.id}`),
-      el('div', { class: 'card card--flat' }, `${item.mmg_name} · ${item.player_name}`),
+      el('div', { class: 'section__label' }, isNew ? '新增場次' : `編輯場次 #${item.id}`),
+      // 既有場次的劇本與預定者只顯示不編輯（改這兩者等於變成另一筆預約）；
+      // 新增時當然要選。
+      isNew
+        ? el('div', { class: 'row' }, [
+            field({
+              label: '劇本',
+              control: select({
+                options: [{ value: '', label: '請選擇' },
+                  ...state.mmg.items.map((m) => ({ value: m.id, label: m.name }))],
+                value: item.mmg_id ?? '',
+                onChange: (v) => {
+                  item.mmg_id = v ? Number(v) : null;
+                  // 換劇本等於換一組角色，先前選的主持人不再適用
+                  item.gm_user_ids = [null, null, null, null];
+                  item.gm_confirmed = [false, false, false, false];
+                  render();
+                },
+                ariaLabel: '劇本',
+              }),
+            }),
+            field({
+              label: '預定者',
+              control: select({
+                options: [{ value: '', label: '請選擇' },
+                  ...state.users.items.map((u) => ({ value: u.id, label: u.name || u.email }))],
+                value: item.player_id ?? '',
+                onChange: (v) => { item.player_id = v ? Number(v) : null; },
+                ariaLabel: '預定者',
+              }),
+            }),
+          ])
+        : el('div', { class: 'card card--flat' }, `${item.mmg_name} · ${item.player_name}`),
       el('div', { class: 'row' }, [
         field({ label: '日期', control: el('input', { type: 'date', value: item.session_date, onChange: (e) => { item.session_date = e.target.value; } }) }),
         field({ label: '時間', control: el('input', { type: 'time', step: '1800', value: item.session_time, onChange: (e) => { item.session_time = e.target.value; } }) }),
@@ -506,6 +589,15 @@ export function createAdminView() {
         el('button', {
           class: 'btn btn--primary btn--small',
           onClick: async () => {
+            if (isNew) {
+              // 新增不做前端撞期檢查：create_booking() 在後端就會擋下
+              // 劇本撞期與主持人撞期並回錯誤訊息。這裡再問一次只是多一支
+              // 查詢，而且那筆預約還不存在，根本查不了。
+              save('/api/admin/bookings', item,
+                () => { b.editing = null; loadBookings(); }, { create: true });
+              return;
+            }
+
             const target = item.status ?? b.tab;
             // 清單那一包沒有 status 欄位（子頁籤本身就是狀態），所以原本
             // 的狀態就是當前頁籤。
@@ -532,7 +624,7 @@ export function createAdminView() {
             }
             save(`/api/admin/bookings/${item.id}`, item, () => { b.editing = null; loadBookings(); });
           },
-        }, '儲存'),
+        }, isNew ? '新增' : '儲存'),
       ]),
     ]);
   }
