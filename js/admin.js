@@ -389,7 +389,14 @@ export function createAdminView() {
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),
         el('div', { class: 'list-item__side' },
-          el('button', { class: 'btn btn--ghost btn--small', onClick: () => { state.bookings.editing = deepCopy(item); render(); } }, '編輯')),
+          // 補上 status 再進編輯畫面。清單那一包刻意沒有這個欄位（子頁籤
+          // 本身就是狀態），但編輯畫面要把它送回後端——不補的話，只要
+          // 管理員沒動那個下拉，送出去的 status 就是 undefined，後端收到
+          // None 直接退件「未知的狀態」。任何「不改狀態的儲存」都會失敗。
+          el('button', {
+            class: 'btn btn--ghost btn--small',
+            onClick: () => { state.bookings.editing = { ...deepCopy(item), status: b.tab }; render(); },
+          }, '編輯')),
       ]),
     ))));
 
