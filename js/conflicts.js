@@ -54,9 +54,12 @@ function blockDialog(title, conflicts, tail) {
 
 /** 劇本撞期的提醒。可以放行，回傳 true 代表繼續。 */
 function scriptConflictDialog(script, { tail, confirmText }) {
+  // 帶上劇本名稱。撞到的必然是同一齣戲，但只寫時間會讓人得自己回想是哪
+  // 一齣——兩種撞期的訊息格式一致，讀的人不必分辨自己在看哪一種。
+  const lines = script.map((c) => `${c.mmg_name} ${when(c)}`);
   return confirmDialog({
     title: '該場次時間衝突',
-    body: `已預定場次時間為\n${script.map(when).join('\n')}\n\n${tail}`,
+    body: `已預定場次時間為\n${lines.join('\n')}\n\n${tail}`,
     confirmText,
     cancelText: '取消',
   });
