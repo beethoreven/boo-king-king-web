@@ -17,6 +17,41 @@ const API_BASE =
 
 const TOKEN_KEY = 'booking_king_session';
 
+// 網址加 ?debug=api 打開呼叫計數，正式使用時不會執行到。
+//
+// 放在這裡是因為這支是全站唯一的 fetch 出口——每一個模組都走 request()，
+// 沒有任何地方自己 fetch。在這一點計數就抓得到全部，不會漏。
+//
+// 注意這裡數的是「應用程式送出幾次呼叫」。瀏覽器實際送出的 HTTP 請求
+// 可能更多：跨來源加上 Authorization 標頭會觸發 OPTIONS 預檢，那是
+// 瀏覽器自己發的，這一層看不到。要看實際的請求數要開 DevTools 的
+// Network 分頁。
+const DEBUG_API = new URLSearchParams(window.location.search).get('debug') === 'api';
+
+const apiStats = { total: 0, byPath: new Map(), startedAt: Date.now() };
+
+/** ?debug=api 時可在 console 呼叫 __apiStats() 看累計結果。 */
+function statsSnapshot() {
+  const seconds = ((Date.now() - apiStats.startedAt) / 1000).toFixed(1);
+  const rows = [...apiStats.byPath.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({ 呼叫: key, 次數: count }));
+  console.table(rows);
+  console.log(`總計 ${apiStats.total} 次 / ${seconds} 秒`);
+  return { total: apiStats.total, seconds: Number(seconds) };
+}
+
+if (DEBUG_API) {
+  window.__apiStats = statsSnapshot;
+  window.__apiReset = () => {
+    apiStats.total = 0;
+    apiStats.byPath.clear();
+    apiStats.startedAt = Date.now();
+    console.log('API 計數已歸零');
+  };
+  console.log('API 計數已開啟：__apiStats() 看統計，__apiReset() 歸零');
+}
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY) || null;
 }
@@ -56,11 +91,22 @@ async function request(method, path, { body, query } = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
+  const startedAt = DEBUG_API ? performance.now() : 0;
   const res = await fetch(url, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  if (DEBUG_API) {
+    // 統計用 path 不含查詢字串——同一支 API 換不同日期查詢，關心的是
+    // 「這支被打了幾次」，把每組參數各算一列只會看不出重點。
+    const key = `${method} ${path}`;
+    apiStats.total += 1;
+    apiStats.byPath.set(key, (apiStats.byPath.get(key) ?? 0) + 1);
+    const ms = (performance.now() - startedAt).toFixed(0);
+    console.log(`[api #${apiStats.total}] ${key} → ${res.status}  ${ms}ms`);
+  }
 
   // 401 = 憑證無效或過期，要重新登入。
   // 403 = 憑證有效但這個帳號沒有權限（被停用、或權限不足）——
