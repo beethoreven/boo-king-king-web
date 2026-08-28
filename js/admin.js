@@ -44,6 +44,7 @@ const BOOKING_STATUS_OPTIONS = [
 // 會讓上一次沒存檔的編輯殘留到下一次新增。
 const emptyMmg = () => ({
   id: null, name: '', period: null, price: null, booking_cost: null,
+  ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
   gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
 });
@@ -238,7 +239,8 @@ export function createAdminView() {
       el('div', { class: 'list-item__main' }, [
         el('div', { class: 'list-item__title' }, m.name),
         el('div', { class: 'list-item__meta' },
-          `${m.period ?? '—'} 小時 · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
+          `${m.period ?? '—'} 小時（佈置 ${m.ready_time_cost ?? 0}／還原 ${m.reset_time_cost ?? 0}）`
+          + ` · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
         el('div', { class: 'list-item__meta' },
           m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
       ]),
@@ -262,6 +264,14 @@ export function createAdminView() {
         field({ label: '時長（小時）', control: el('input', { type: 'number', step: '0.1', value: m.period ?? '', onInput: setNum('period') }) }),
         field({ label: '人數（顯示用）', control: el('input', { type: 'text', value: m.players ?? '', onInput: setField('players') }) }),
       ]),
+      el('div', { class: 'row' }, [
+        field({ label: '佈置時間（小時）',
+          control: el('input', { type: 'number', step: '0.1', min: '0', value: m.ready_time_cost ?? 0.5, onInput: setNum('ready_time_cost') }) }),
+        field({ label: '還原時間（小時）',
+          control: el('input', { type: 'number', step: '0.1', min: '0', value: m.reset_time_cost ?? 0.5, onInput: setNum('reset_time_cost') }) }),
+      ]),
+      el('div', { class: 'field__hint' },
+        '包廂被佔用的區間是「開始前的佈置」到「結束後的還原」，衝突判定看的是這一段'),
       el('div', { class: 'row' }, [
         field({ label: '售價', control: el('input', { type: 'number', value: m.price ?? '', onInput: setNum('price') }) }),
         field({ label: '訂金', control: el('input', { type: 'number', value: m.booking_cost ?? '', onInput: setNum('booking_cost') }) }),
