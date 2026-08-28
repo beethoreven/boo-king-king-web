@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
-import { adminMaySwitch } from './conflicts.js';
+import { adminMaySwitch, adminMayConfirmHost } from './conflicts.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -514,7 +514,18 @@ export function createAdminView() {
               type: 'checkbox',
               checked: Boolean(item.gm_confirmed[i]),
               disabled: !item.gm_user_ids[i],
-              onChange: (e) => { item.gm_confirmed[i] = e.target.checked; },
+              // 打勾等於代這位主持人確認指定，所以走跟他自己按確認一樣的
+              // 檢查：他若在這個時段已經被別的成立場次佔住，就不能勾。
+              // 取消打勾不必檢查——收回一個確認永遠是允許的。
+              onChange: async (e) => {
+                if (!e.target.checked) { item.gm_confirmed[i] = false; return; }
+                if (!await adminMayConfirmHost(item.id, item.gm_user_ids[i])) {
+                  item.gm_confirmed[i] = false;
+                  render();          // 把勾勾退回去
+                  return;
+                }
+                item.gm_confirmed[i] = true;
+              },
             }),
             '已確認',
           ]),

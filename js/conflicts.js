@@ -36,6 +36,22 @@ async function fetchConflicts(bookingId) {
   }
 }
 
+/**
+ * 主持人撞期的硬擋。只有一顆「取消」，沒有放行的選項。
+ *
+ * 用 confirmDialog 而不是 alertDialog，是為了讓那顆按鈕寫「取消」而不是
+ * 「確認」——這個對話框沒有任何東西可以確認，寫「確認」會讓人以為按下去
+ * 就成立了。
+ */
+function blockDialog(title, conflicts, tail) {
+  return confirmDialog({
+    title,
+    body: `${conflicts.map((c) => `${c.mmg_name} 已預定在 ${when(c)}`).join('\n')}\n\n${tail}`,
+    confirmText: '取消',
+    cancelText: null,
+  });
+}
+
 /** 劇本撞期的提醒。可以放行，回傳 true 代表繼續。 */
 function scriptConflictDialog(script, { tail, confirmText }) {
   return confirmDialog({
@@ -58,16 +74,8 @@ export async function hostMayConfirm(bookingId) {
 
   const mine = data.hosts.filter((c) => c.is_me);
   if (mine.length) {
-    // 只有一顆按鈕，而且是「取消」：另一場沒取消之前，這場他就是不能接。
-    // 用 confirmDialog 而不是 alertDialog，是因為要讓那顆按鈕寫「取消」
-    // 而不是「確認」——這個對話框沒有任何東西可以確認。
-    await confirmDialog({
-      title: '你有衝突場次',
-      body: `${mine.map((c) => `${c.mmg_name} 已預定在 ${when(c)}`).join('\n')}\n\n`
-          + '該場次未取消前你不能確認衝突場次，請通知管理員處理',
-      confirmText: '取消',
-      cancelText: null,
-    });
+    await blockDialog('你有衝突場次', mine,
+      '該場次未取消前你不能確認衝突場次，請通知管理員處理');
     return false;
   }
 
@@ -78,6 +86,27 @@ export async function hostMayConfirm(bookingId) {
     });
   }
   return true;
+}
+
+/**
+ * 管理員替某位主持人打勾（代他確認指定）之前的檢查。
+ * 回傳 true 代表可以打勾。
+ *
+ * 跟主持人自己按確認走的是同一條規則：管理員打這個勾等於代他確認，
+ * 那個人一樣不可能同時待在兩場。差別只在訊息的口氣——管理員看得到
+ * 全部場次，所以請他判斷哪一場才是正式的，而不是叫他去通知別人。
+ */
+export async function adminMayConfirmHost(bookingId, hostId) {
+  const data = await fetchConflicts(bookingId);
+  if (!data) return true;
+
+  const theirs = data.hosts.filter((c) => c.host_id === hostId);
+  if (!theirs.length) return true;
+
+  // 名字取自查詢結果，不用畫面上的——同一份資料來源，不會對不上。
+  await blockDialog(`${theirs[0].host_name}有衝突場次`, theirs,
+    '該場次未取消前你不能確認衝突指定，請確認何者為正式場次');
+  return false;
 }
 
 /** 管理員切換狀態之前的檢查。回傳 true 代表可以切。 */
