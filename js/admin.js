@@ -691,8 +691,20 @@ export function createAdminView() {
               // 新增不做前端撞期檢查：create_booking() 在後端就會擋下
               // 劇本撞期與主持人撞期並回錯誤訊息。這裡再問一次只是多一支
               // 查詢，而且那筆預約還不存在，根本查不了。
-              save('/api/admin/bookings', item,
-                () => { b.editing = null; loadBookings(); }, { create: true });
+              save('/api/admin/bookings', item, () => {
+                // 只重載這筆會落在的那個子頁籤，不要整包重抓。
+                // loadBookings() 打的 /api/admin/bookings 在後端會跑五次
+                // list_tab（五個頁籤各一頁），而新增只可能影響其中一個。
+                //
+                // 順便切過去：剛建好的東西應該看得到，留在原本的頁籤上
+                // 會像是什麼都沒發生。回第一頁同理。
+                const landed = item.status ?? 'gm_confirm';
+                b.editing = null;
+                b.tab = landed;
+                b.data[landed].start = 1;
+                b.draft = { ...b.data[landed].filters };
+                reloadBookingTab(landed);
+              }, { create: true });
               return;
             }
 
