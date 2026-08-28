@@ -174,8 +174,16 @@ export function createBookingView() {
     hosts: [...EMPTY_HOSTS],
     hostErrors: [null, null, null, null],
     // 已經驗證過的主持人選擇，避免重選同一個值又打一次 API。
-    // key 是 `${slot}:${userId}`，值是錯誤訊息或 null（代表驗證過沒問題）
+    // key 是 `${slot}:${userId}`，值是錯誤訊息或 null（代表驗證過沒問題）。
+    //
+    // ★ 鍵裡刻意不含時段——因為換時段時整份快取會被丟掉（見
+    //   checkedSlot）。若哪天改成保留跨時段的結果，鍵就必須帶上時段，
+    //   否則「A 主持人在 10:00 撞期」會被誤用到 14:00 上。
     hostChecked: new Map(),
+    // 這份主持人檢查是針對哪一個時段做的。時段一換，先前的結果就不再
+    // 適用：撞期是「這個人在這段時間有沒有別的場」，換了時間答案可能
+    // 完全相反。
+    checkedSlot: '',
     slot: null,         // 該時段的排隊狀況
     loading: true,      // 劇本清單還在路上
     submitting: false,
@@ -298,8 +306,34 @@ export function createBookingView() {
   //   （不存在的日期），舊回應仍然把提示寫成「可進行預約」。
   let slotSeq = 0;
 
+  /**
+   * 時段變了就把主持人的選擇、錯誤與快取一起清掉，回傳有沒有真的清到東西。
+   *
+   * 不這樣做的話會留下騙人的畫面：在 10:00 選了撞期的主持人、看到紅字，
+   * 改成 14:00 之後那行紅字還在，而重選同一個人會命中快取、連 API 都不打，
+   * 於是紅字永遠不會消失——玩家會以為這位主持人怎麼樣都不能選。
+   *
+   * 選擇清空而不是自動重驗：重驗要為每一位已選的主持人各打一支 API，
+   * 而使用者換時間之後本來就常常會換人。讓他重選一次，每一次選擇都是
+   * 對「現在這個時段」問的，不會有過期的答案。
+   */
+  function resetHostsForNewSlot() {
+    const key = currentDate() && currentTime() ? `${currentDate()} ${currentTime()}` : '';
+    if (!key || key === state.checkedSlot) return false;
+    state.checkedSlot = key;
+
+    const had = state.hosts.some((h) => h !== null);
+    state.hosts = [...EMPTY_HOSTS];
+    state.hostErrors = [null, null, null, null];
+    state.hostChecked.clear();
+    return had;
+  }
+
   /** 日期時間齊全就去查該時段的排隊狀況。 */
   async function refreshSlot() {
+    if (resetHostsForNewSlot()) {
+      toast('時段已變更，請重新選擇主持人');
+    }
     syncHints();
     const seq = ++slotSeq;
     const date = currentDate();
@@ -347,6 +381,7 @@ export function createBookingView() {
     state.hosts = [...EMPTY_HOSTS];
     state.hostErrors = [null, null, null, null];
     state.hostChecked.clear();
+    state.checkedSlot = '';
     state.slot = null;
   }
 
