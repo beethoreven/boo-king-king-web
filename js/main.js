@@ -24,19 +24,15 @@ const VIEWS = {
 
 let currentView = 'booking';
 
+/**
+ * 頂欄的品牌圖，來源是 brand-mark.png。
+ *
+ * 要換圖就直接覆蓋那個檔案，這裡不用動——尺寸與對齊都由 CSS 的
+ * .topbar__mark 決定。圖請做成透明背景：頂欄是 #14120F 的深色，
+ * 白底方塊會很突兀。
+ */
 function brandIcon() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '20');
-  svg.setAttribute('height', '20');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'var(--accent)');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M5 12l5 5L19 7');
-  svg.append(path);
-  return svg;
+  return el('img', { class: 'topbar__mark', src: 'brand-mark.png', alt: '', 'aria-hidden': 'true' });
 }
 
 function renderTopbar() {
