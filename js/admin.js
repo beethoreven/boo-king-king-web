@@ -402,6 +402,26 @@ export function createAdminView() {
     return el('div', {}, nodes);
   }
 
+  /**
+   * 這場還沒「有人確認」的角色，回傳可以直接顯示的說明字串。
+   *
+   * 沒指派到人也算數：一個角色掛著空位，跟掛著一個還沒點頭的人，對
+   * 「這場到底成不成立」來說是同一件事——都還沒有人答應要帶。
+   *
+   * 讀的是畫面上當下的值（item.gm_user_ids / item.gm_confirmed），不是
+   * 資料庫載入時的值。管理員可能在同一個表單裡先勾了確認再改狀態，
+   * 那就該以他眼前看到的為準。
+   */
+  function unconfirmedRoles(item, mmg) {
+    const out = [];
+    for (const [i, slot] of (mmg?.gm_slots ?? []).entries()) {
+      if (!slot.name) continue;                       // 這齣戲沒有這個角色
+      if (!item.gm_user_ids[i]) out.push(`${slot.name}：未指定主持人`);
+      else if (!item.gm_confirmed[i]) out.push(`${slot.name}：尚未確認`);
+    }
+    return out;
+  }
+
   function renderBookingEditor() {
     const b = state.bookings;
     const item = b.editing;
@@ -417,7 +437,38 @@ export function createAdminView() {
       el('div', { class: 'row' }, [
         field({
           label: '狀態',
-          control: select({ options: BOOKING_STATUS_OPTIONS, value: item.status ?? b.tab, onChange: (v) => { item.status = v; }, ariaLabel: '場次狀態' }),
+          // 切到「已取消」以外的狀態時，如果還有角色沒有已確認的主持人，
+          // 要先問過。後端刻意不擋這件事（那個介面存在的目的就是人工
+          // 介入，見 bookings_admin.update 的說明），所以這裡是唯一會
+          // 提醒的地方——沒有它，管理員會在沒有人答應帶場的情況下，
+          // 不知不覺把場次推到「已成立」。
+          //
+          // 答應之後也不會去把那些勾勾補成已確認：確認與否是主持人自己
+          // 的事實，不是管理員按了「還是要」就變成真的。狀態照切，
+          // 個別的確認狀態維持畫面上當下的值。
+          control: select({
+            options: BOOKING_STATUS_OPTIONS,
+            value: item.status ?? b.tab,
+            onChange: async (v) => {
+              if (v === (item.status ?? b.tab)) return;
+              if (v !== 'cancelled') {
+                const outstanding = unconfirmedRoles(item, mmg);
+                if (outstanding.length) {
+                  const ok = await confirmDialog({
+                    title: '目前尚有主持人未確認',
+                    body: `${outstanding.join('\n')}\n\n還是要切換嗎？`,
+                    confirmText: '還是要',
+                    cancelText: '取消',
+                  });
+                  // 重繪讓下拉選單回到原本的狀態——item.status 沒被改動，
+                  // 重建出來的選單自然顯示舊值。
+                  if (!ok) { render(); return; }
+                }
+              }
+              item.status = v;
+            },
+            ariaLabel: '場次狀態',
+          }),
         }),
         field({
           label: '訂金',
