@@ -23,6 +23,10 @@ let currentUser = null;
 // 被停權的人不會落在這裡——他註冊過，只是被關掉了，該看到的是別的訊息。
 let pendingRegistration = null;
 
+// 登入了、註冊過，但帳號被停權。這是第四種狀態：他進得了畫面，只是
+// 什麼都做不了。跟「沒登入」分開，否則他會被丟回登入頁一直重登。
+let blockedStatus = null;
+
 export function getUser() {
   return currentUser;
 }
@@ -30,6 +34,11 @@ export function getUser() {
 /** 已登入但還沒註冊時回傳 { email }，否則 null。 */
 export function getPendingRegistration() {
   return pendingRegistration;
+}
+
+/** 帳號被停權時回傳狀態字串（目前只有 'deactive'），否則 null。 */
+export function getBlockedStatus() {
+  return blockedStatus;
 }
 
 /** 目前登入者是否至少有這個等級的權限（1 管理員 ⊃ 2 主持人 ⊃ 3 玩家）。 */
@@ -54,11 +63,13 @@ export async function refreshStatus() {
     currentUser = status.authorized ? status : null;
     pendingRegistration = (!status.authorized && !status.registered)
       ? { email: status.email } : null;
+    blockedStatus = (!status.authorized && status.registered) ? status.status : null;
     return currentUser;
   } catch {
     // 401 已經在 api.js 清掉 token 並觸發 handler
     currentUser = null;
     pendingRegistration = null;
+    blockedStatus = null;
     return null;
   }
 }
@@ -73,10 +84,20 @@ export async function loginWithGoogle(idToken) {
   if (result.registered === false) {
     currentUser = null;
     pendingRegistration = { email: result.email };
+    blockedStatus = null;
+    return null;
+  }
+  // 被停權的人一樣拿到 session（要讓他進得了畫面看見自己被擋），
+  // 但不是一個可以用的使用者。
+  if (result.authorized === false) {
+    currentUser = null;
+    pendingRegistration = null;
+    blockedStatus = result.status;
     return null;
   }
   currentUser = { ...result, authorized: true };
   pendingRegistration = null;
+  blockedStatus = null;
   return currentUser;
 }
 

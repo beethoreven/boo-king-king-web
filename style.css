@@ -596,3 +596,44 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   color: var(--ink-soft);
   white-space: pre-line;
 }
+
+/* ── 使用者選單 ─────────────────────────────────────────── */
+
+.menu { position: relative; }
+
+.menu__toggle { padding: 8px 10px; display: inline-flex; }
+
+.menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu__item:last-child { border-bottom: none; }
+.menu__item:hover { background: var(--surface-2); color: var(--accent); }
+
+/* 破壞性動作的按鈕。紅底白字——它跟旁邊那顆「編輯」的後果不是同一個
+   量級，長得一樣會被順手按到。 */
+.btn--danger { background: var(--danger); color: #fff; }
+.btn--danger:disabled { background: #4a3330; color: var(--ink-disabled); cursor: not-allowed; }

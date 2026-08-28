@@ -22,6 +22,7 @@
 
 import { api, ApiError } from './api.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner } from './ui.js';
+import { getUser } from './auth.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
 const EMPTY_HOSTS = [null, null, null, null];
@@ -515,6 +516,17 @@ export function createBookingView() {
   }
 
   async function submit() {
+    // 排在所有檢查之前。沒有聯絡資料的話，表單填得多完整都訂不成——
+    // 先講一串「主持人沒選」再告訴他其實根本不能訂，是浪費他的時間。
+    // 後端也會擋（那是把關），這裡擋是為了讓他早點知道。
+    if (!getUser()?.has_contact) {
+      await alertDialog({
+        title: '無法預定場次',
+        body: '你沒有填寫基本聯絡資料，無法預定場次',
+      });
+      return;
+    }
+
     const problems = collectProblems();
     if (problems.length) {
       await alertDialog({ title: '無法送出預約', body: problems.join('\n') });

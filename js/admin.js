@@ -25,6 +25,9 @@ const ROLE_OPTIONS = [
 const USER_STATUS_OPTIONS = [
   { value: 'active', label: '啟用' },
   { value: 'deactive', label: '停用' },
+  // 使用者自己刪掉帳號會變成這個。放進選單是為了讓管理員改得回來——
+  // 刪除的對話框寫著「只能聯繫管理員恢復」，那條路必須真的存在。
+  { value: 'deleted', label: '已刪除' },
 ];
 
 const MMG_STATUS_OPTIONS = [
