@@ -583,3 +583,8 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   font-size: 14px;
   font-weight: 400;
 }
+
+/* 頁籤列右側的動作按鈕（場次整理）。頁籤本身可以水平捲動，按鈕要固定
+   在右邊不跟著捲走，所以用 margin-left:auto 推到底、並且不可壓縮。 */
+.tabs--with-action { align-items: center; }
+.tabs__action { margin-left: auto; flex: none; padding-left: 10px; }

@@ -708,15 +708,57 @@ export function createAdminView() {
 
   // ── 主渲染 ──────────────────────────────────────────────
 
+  /**
+   * 手動跑一次場次整理。
+   *
+   * 每日排程只往回看兩天，漏跑幾天就會有場次卡在 booked 再也不會被處理。
+   * 與其疊一層自動補償（那要記「上次跑到哪」，又是一組要維護的狀態），
+   * 不如給人一個按鈕。
+   *
+   * 按鈕在整理期間停用：這支會改一批資料，按兩次不會出錯（重跑是安全
+   * 的），但會讓人以為第一次沒生效。
+   */
+  async function tidyBookings(btn) {
+    btn.disabled = true;
+    btn.textContent = '整理中…';
+    try {
+      const r = await api.post('/api/admin/bookings/tidy', {});
+      // 先把按鈕復原再開對話框：alertDialog 會等使用者關掉才往下走，
+      // 不先復原的話，他讀結果的整段時間按鈕都還停在「整理中…」。
+      btn.disabled = false;
+      btn.textContent = '場次整理';
+      await alertDialog({
+        title: '場次整理完成',
+        body: [
+          `已結束：${r.ended ?? '—'} 筆`,
+          `逾期未成立而取消：${r.cancelled ?? '—'} 筆`,
+          `候補逾期失效：${r.waitlist_expired ?? '—'} 筆`,
+          r.errors?.length ? `\n有錯誤：\n${r.errors.join('\n')}` : '',
+        ].filter(Boolean).join('\n'),
+      });
+      // 整理會改狀態，場次那幾包一定變了，重抓。
+      if (state.section === 'bookings') loadBookings(); else render();
+    } catch (err) {
+      await alertDialog({ title: '場次整理失敗', body: err.message });
+      render();
+    }
+  }
+
   function render() {
     clear(root);
+    const tidyBtn = el('button', { class: 'btn btn--ghost btn--small' }, '場次整理');
+    tidyBtn.addEventListener('click', () => tidyBookings(tidyBtn));
+
     root.append(
-      el('div', { class: 'tabs' }, SECTIONS.map((s) =>
-        el('button', {
-          class: `tab${s.key === state.section ? ' tab--active' : ''}`,
-          onClick: () => loadSection(s.key),
-        }, s.label),
-      )),
+      el('div', { class: 'tabs tabs--with-action' }, [
+        ...SECTIONS.map((s) =>
+          el('button', {
+            class: `tab${s.key === state.section ? ' tab--active' : ''}`,
+            onClick: () => loadSection(s.key),
+          }, s.label),
+        ),
+        el('div', { class: 'tabs__action' }, tidyBtn),
+      ]),
     );
 
     if (state.section === 'mmg') {
