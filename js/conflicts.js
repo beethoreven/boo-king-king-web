@@ -3,9 +3,9 @@
  *
  * 有兩種撞期，嚴重程度不同：
  *
- *   劇本撞期 —— 同一個劇本在這段時間已經有另一場成立了。劇本是實體資源
- *     （同一套本、同一間房），一次只能開一場。這是排班問題，人看過之後
- *     可以決定放行。
+ *   包廂撞期 —— 這齣戲要用的包廂在這段時間已經被別的場次佔著了。包廂
+ *     才是實體資源，一次只能開一場——佔著的可能是完全不同的一齣戲。
+ *     這是排班問題，人看過之後可以決定放行。
  *
  *   主持人撞期 —— 這位主持人自己在這段時間已經被別的成立場次佔住，不論
  *     是不是同一齣戲。這個不能放行：一個人沒辦法同時待在兩場。要嘛另一
@@ -52,11 +52,11 @@ function blockDialog(title, conflicts, tail) {
   });
 }
 
-/** 劇本撞期的提醒。可以放行，回傳 true 代表繼續。 */
-function scriptConflictDialog(script, { tail, confirmText }) {
-  // 帶上劇本名稱。撞到的必然是同一齣戲，但只寫時間會讓人得自己回想是哪
-  // 一齣——兩種撞期的訊息格式一致，讀的人不必分辨自己在看哪一種。
-  const lines = script.map((c) => `${c.mmg_name} ${when(c)}`);
+/** 包廂撞期的提醒。可以放行，回傳 true 代表繼續。 */
+function roomConflictDialog(room, { tail, confirmText }) {
+  // 佔著包廂的可能是別齣戲，所以劇本名稱一定要寫出來——只給時間的話，
+  // 讀的人不知道是什麼卡住了。
+  const lines = room.map((c) => `${c.mmg_name} ${when(c)}`);
   return confirmDialog({
     title: '該場次時間衝突',
     body: `已預定場次時間為\n${lines.join('\n')}\n\n${tail}`,
@@ -82,8 +82,8 @@ export async function hostMayConfirm(bookingId) {
     return false;
   }
 
-  if (data.script.length) {
-    return scriptConflictDialog(data.script, {
+  if (data.room.length) {
+    return roomConflictDialog(data.room, {
       tail: '請通知管理員處理',
       confirmText: '依然確認',
     });
@@ -95,7 +95,7 @@ export async function hostMayConfirm(bookingId) {
  * 管理員按下儲存之前的檢查。回傳 true 代表可以送出。
  *
  * 兩層依序跑，共用同一次查詢：
- *   1. 劇本撞期——提醒，可以放行
+ *   1. 包廂撞期——提醒，可以放行
  *   2. 主持人撞期——硬擋，不能放行
  * 順序是刻意的：擋得住的先問，擋不住的後擋，被擋下來時前面那題也已經
  * 問過了，使用者知道這一場總共有幾個問題。
@@ -114,8 +114,8 @@ export async function adminMaySave(bookingId) {
   const data = await fetchConflicts(bookingId);
   if (!data) return true;
 
-  if (data.script.length) {
-    const ok = await scriptConflictDialog(data.script, {
+  if (data.room.length) {
+    const ok = await roomConflictDialog(data.room, {
       tail: '請確保沒有衝突場次狀況發生',
       confirmText: '依然切換',
     });

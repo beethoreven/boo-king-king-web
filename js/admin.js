@@ -44,7 +44,7 @@ const BOOKING_STATUS_OPTIONS = [
 // 會讓上一次沒存檔的編輯殘留到下一次新增。
 const emptyMmg = () => ({
   id: null, name: '', period: null, price: null, booking_cost: null,
-  players: '', waitlist_limit: 3, status: 'active',
+  players: '', waitlist_limit: 3, status: 'active', room_id: 1,
   gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
 });
 
@@ -69,7 +69,7 @@ export function createAdminView() {
 
   const state = {
     section: 'mmg',
-    mmg: { items: [], hostCandidates: [], loading: true, editing: null, search: '' },
+    mmg: { items: [], hostCandidates: [], rooms: [], loading: true, editing: null, search: '' },
     users: { items: [], loading: true, editing: null, search: '' },
     bookings: {
       tabs: {},           // 後端給的 {key: 中文標籤}
@@ -91,6 +91,7 @@ export function createAdminView() {
       const d = await api.get('/api/admin/mmg');
       state.mmg.items = d.items;
       state.mmg.hostCandidates = d.host_candidates;
+      state.mmg.rooms = d.rooms ?? [];
     } catch (err) { toast(err.message, { error: true }); }
     state.mmg.loading = false;
     render();
@@ -273,6 +274,16 @@ export function createAdminView() {
           control: select({ options: MMG_STATUS_OPTIONS, value: m.status, onChange: (v) => { m.status = v; }, ariaLabel: '劇本狀態' }),
         }),
       ]),
+      field({
+        label: '包廂',
+        control: select({
+          options: state.mmg.rooms.map((r) => ({ value: r.id, label: r.name })),
+          value: m.room_id ?? 1,
+          onChange: (v) => { m.room_id = Number(v); },
+          ariaLabel: '包廂',
+        }),
+        hint: '場次衝突是看包廂有沒有被佔用，不是看同一齣戲被排兩場',
+      }),
 
       el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人角色'),
       ...m.gm_slots.map((slot, i) => renderGmSlot(m, slot, i)),
