@@ -92,6 +92,11 @@ export function createBookingView() {
     hostChecked: new Map(),
     slot: null,         // 該時段的排隊狀況
     submitting: false,
+    // 這次「送出預約」意圖的冪等鍵，只在真正送出時才產生（見 submit()）。
+    // 日期、時間、主持人任何一項改變，都代表變成另一次意圖，必須清成
+    // null 逼下次送出重新產生一組——否則會被後端的 ON CONFLICT 誤判成
+    // 同一筆預約，改了日期卻建立/回傳的是改之前那筆。
+    requestId: null,
   };
 
   async function load() {
@@ -104,6 +109,7 @@ export function createBookingView() {
   }
 
   function resetBelowScript() {
+    state.requestId = null;
     state.date = '';
     state.hour = '';
     state.minute = '';
@@ -128,6 +134,7 @@ export function createBookingView() {
   }
 
   function pickDate(value) {
+    state.requestId = null;
     state.date = value;
     // 換日期時清掉時間：不同日期可能開放不同時段，留著上一個日期選過的
     // 時間會看起來像已經選好，其實那個時段在新日期可能根本不存在。
@@ -139,6 +146,7 @@ export function createBookingView() {
 
   /** 「時」與「分」任一個改變時呼叫。兩個都選了才去查該時段的狀況。 */
   async function pickTimePart(part, value) {
+    state.requestId = null;
     state[part] = value;
     state.slot = null;
     const time = currentTime();
@@ -163,6 +171,7 @@ export function createBookingView() {
 
   async function pickHost(slotIndex, value) {
     const userId = value ? Number(value) : null;
+    state.requestId = null;
     state.hosts[slotIndex] = userId;
 
     if (userId === null) {
@@ -253,23 +262,32 @@ export function createBookingView() {
     state.submitting = true;
     render();
     try {
-      // ★ request_id 在這裡產生，而且只產生一次——這是冪等鍵，
-      //   同一次意圖的所有重試都必須沿用同一組。如果每次重送都換
-      //   新的 UUID，冪等保護就完全失效：玩家網路不穩重按一次，
-      //   就可能佔到兩個名額，而名額是有限且被搶的。
-      const requestId = crypto.randomUUID();
+      // ★ request_id 是冪等鍵，同一次意圖的所有重試都要沿用同一組，
+      //   否則玩家網路不穩重按一次就可能佔到兩個名額（名額有限且被搶）。
+      //
+      //   但「同一次意圖」不是「同一個 state 物件」——只要使用者在這之間
+      //   改了日期、時間或主持人，那就是另一筆預約，絕不能沿用舊的 id，
+      //   不然會被後端的 ON CONFLICT 誤判成同一筆，回傳/鎖住的是改之前
+      //   那個時段。所以 requestId 只存在這裡：pickDate／pickTimePart／
+      //   pickHost／resetBelowScript 任何一個都會先把它清成 null，逼這裡
+      //   重新產生一組；只有「什麼都沒改、單純重按送出」才會沿用。
+      if (!state.requestId) state.requestId = crypto.randomUUID();
       const result = await api.post('/api/bookings', {
         mmg_id: Number(state.mmgId),
         session_date: state.date,
         session_time: currentTime(),
         gm_user_ids: state.hosts,
-        request_id: requestId,
+        request_id: state.requestId,
       });
       toast(result.already_existed ? '這筆預約先前已經成立' : `預約成功（${result.label}）`);
       resetBelowScript();
       state.mmgId = '';
       state.detail = null;
     } catch (err) {
+      // 刻意不清 requestId：失敗可能是請求根本沒送到（例如 failed to
+      // fetch），也可能是送到了、寫入成功但回應在路上遺失——兩種都要讓
+      // 使用者「什麼都沒改就重按」時沿用同一組 id，交給後端的 ON CONFLICT
+      // 判斷這是不是同一次意圖，而不是無條件建出第二筆。
       await alertDialog({ title: '預約失敗', body: err.message });
     } finally {
       state.submitting = false;
