@@ -211,7 +211,7 @@ export function createAdminView() {
       ]),
       el('div', { class: 'row' }, [
         field({ label: '序位上限', control: el('input', { type: 'number', min: '0', value: m.waitlist_limit ?? 3, onInput: setNum('waitlist_limit') }),
-          hint: '第 1 序位之外還能再排幾組' }),
+          hint: '這個時段最多可以有幾組（含已成立的）' }),
         field({
           label: '狀態',
           control: select({ options: MMG_STATUS_OPTIONS, value: m.status, onChange: (v) => { m.status = v; }, ariaLabel: '劇本狀態' }),

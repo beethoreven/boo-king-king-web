@@ -559,8 +559,23 @@ function endTime(start, hours) {
   return `${pad(Math.floor(total / 60) % 24, 2)}:${pad(total % 60, 2)}`;
 }
 
+/**
+ * 玩家看到的時段說明。
+ *
+ * 序位只對玩家有意義——主持人與管理員看到的是一份照時間排的清單，
+ * 誰排第幾對他們不改變任何事。所以這段文字只在這個畫面出現。
+ *
+ * 已經有一組成立（booked）跟「大家都還在排隊」是兩件事，說法必須分開：
+ * 前者代表這個時段實際上已經有人要開了，後面排的就是候補；後者只是
+ * 先後順序，誰都還沒定案。
+ */
 function slotMessage(slot) {
   if (slot.is_full) return '本時段已額滿';
-  if (slot.taken > 0) return `本時段目前已有 ${slot.taken} 組預約，您將排在第 ${slot.taken + 1} 序位`;
+  const position = slot.taken + 1;
+  if (slot.has_booked) {
+    return `本時段已經有排定預約，您將排在第 ${position} 序位，`
+         + '若排定預約未取消，候補將於三天後自動失效。';
+  }
+  if (slot.taken > 0) return `本時段目前已有 ${slot.taken} 組預約，您將排在第 ${position} 序位`;
   return '本時段目前可進行預約';
 }
