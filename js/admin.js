@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
-import { adminMaySwitch, adminMayConfirmHost } from './conflicts.js';
+import { adminMaySave } from './conflicts.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -445,40 +445,11 @@ export function createAdminView() {
       el('div', { class: 'row' }, [
         field({
           label: '狀態',
-          // 切到「已取消」以外的狀態時，如果還有角色沒有已確認的主持人，
-          // 要先問過。後端刻意不擋這件事（那個介面存在的目的就是人工
-          // 介入，見 bookings_admin.update 的說明），所以這裡是唯一會
-          // 提醒的地方——沒有它，管理員會在沒有人答應帶場的情況下，
-          // 不知不覺把場次推到「已成立」。
-          //
-          // 答應之後也不會去把那些勾勾補成已確認：確認與否是主持人自己
-          // 的事實，不是管理員按了「還是要」就變成真的。狀態照切，
-          // 個別的確認狀態維持畫面上當下的值。
+          // 這裡只記下選擇，所有檢查都留到按儲存時一起做（見下方）。
           control: select({
             options: BOOKING_STATUS_OPTIONS,
             value: item.status ?? b.tab,
-            onChange: async (v) => {
-              if (v === (item.status ?? b.tab)) return;
-              if (v !== 'cancelled') {
-                // 劇本撞期先問。那是既成事實（這個劇本同時段已經開了另一
-                // 場），比「還沒有人確認」嚴重——先講嚴重的那件。
-                if (!await adminMaySwitch(item.id)) { render(); return; }
-
-                const outstanding = unconfirmedRoles(item, mmg);
-                if (outstanding.length) {
-                  const ok = await confirmDialog({
-                    title: '目前尚有主持人未確認',
-                    body: `${outstanding.join('\n')}\n\n還是要切換嗎？`,
-                    confirmText: '還是要',
-                    cancelText: '取消',
-                  });
-                  // 重繪讓下拉選單回到原本的狀態——item.status 沒被改動，
-                  // 重建出來的選單自然顯示舊值。
-                  if (!ok) { render(); return; }
-                }
-              }
-              item.status = v;
-            },
+            onChange: (v) => { item.status = v; },
             ariaLabel: '場次狀態',
           }),
         }),
@@ -521,18 +492,9 @@ export function createAdminView() {
               type: 'checkbox',
               checked: Boolean(item.gm_confirmed[i]),
               disabled: !item.gm_user_ids[i],
-              // 打勾等於代這位主持人確認指定，所以走跟他自己按確認一樣的
-              // 檢查：他若在這個時段已經被別的成立場次佔住，就不能勾。
-              // 取消打勾不必檢查——收回一個確認永遠是允許的。
-              onChange: async (e) => {
-                if (!e.target.checked) { item.gm_confirmed[i] = false; return; }
-                if (!await adminMayConfirmHost(item.id, item.gm_user_ids[i])) {
-                  item.gm_confirmed[i] = false;
-                  render();          // 把勾勾退回去
-                  return;
-                }
-                item.gm_confirmed[i] = true;
-              },
+              // 只記錄，檢查在儲存時一起做——每勾一次查一次會把免費方案
+              // 的額度花在使用者還沒決定送出的中途狀態上。
+              onChange: (e) => { item.gm_confirmed[i] = e.target.checked; },
             }),
             '已確認',
           ]),
@@ -543,7 +505,33 @@ export function createAdminView() {
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { b.editing = null; render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
-          onClick: () => save(`/api/admin/bookings/${item.id}`, item, () => { b.editing = null; loadBookings(); }),
+          onClick: async () => {
+            const target = item.status ?? b.tab;
+            // 清單那一包沒有 status 欄位（子頁籤本身就是狀態），所以原本
+            // 的狀態就是當前頁籤。
+            const statusChanged = target !== b.tab;
+            const original = b.data[b.tab]?.items.find((x) => x.id === item.id);
+            const newlyConfirmed = Boolean(original) && item.gm_confirmed
+              .some((v, i) => v && !original.gm_confirmed[i]);
+
+            // 只有真的在「推進」這場的時候才檢查。改個備註、改個訂金
+            // 不必打那支查詢——免費方案的額度要花在有意義的地方。
+            if (target !== 'cancelled' && (statusChanged || newlyConfirmed)) {
+              if (!await adminMaySave(item.id)) return;
+
+              const outstanding = unconfirmedRoles(item, mmg);
+              if (outstanding.length) {
+                const ok = await confirmDialog({
+                  title: '目前尚有主持人未確認',
+                  body: `${outstanding.join('\n')}\n\n還是要切換嗎？`,
+                  confirmText: '還是要',
+                  cancelText: '取消',
+                });
+                if (!ok) return;
+              }
+            }
+            save(`/api/admin/bookings/${item.id}`, item, () => { b.editing = null; loadBookings(); });
+          },
         }, '儲存'),
       ]),
     ]);

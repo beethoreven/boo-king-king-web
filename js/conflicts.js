@@ -89,32 +89,46 @@ export async function hostMayConfirm(bookingId) {
 }
 
 /**
- * 管理員替某位主持人打勾（代他確認指定）之前的檢查。
- * 回傳 true 代表可以打勾。
+ * 管理員按下儲存之前的檢查。回傳 true 代表可以送出。
  *
- * 跟主持人自己按確認走的是同一條規則：管理員打這個勾等於代他確認，
- * 那個人一樣不可能同時待在兩場。差別只在訊息的口氣——管理員看得到
- * 全部場次，所以請他判斷哪一場才是正式的，而不是叫他去通知別人。
+ * 兩層依序跑，共用同一次查詢：
+ *   1. 劇本撞期——提醒，可以放行
+ *   2. 主持人撞期——硬擋，不能放行
+ * 順序是刻意的：擋得住的先問，擋不住的後擋，被擋下來時前面那題也已經
+ * 問過了，使用者知道這一場總共有幾個問題。
+ *
+ * ★ 為什麼在「儲存」而不是在「切換狀態」或「打勾」的當下檢查：
+ *   後兩者每互動一次就要打一次 API。目前後端跑在免費方案上，執行時間
+ *   有限，把額度花在「使用者還在改、根本還沒決定送出」的中途狀態上不
+ *   划算。一次儲存最多一次查詢，是這個限制下的取捨。
+ *
+ *   如果哪天換成付費方案，改成即時檢查是更好的體驗——勾下去就知道不
+ *   行，不用等到按了儲存才被退回來。要改的話就是把這支拆回
+ *   「切換狀態時查一次、打勾時查一次」，呼叫點在 admin.js 的狀態下拉
+ *   與確認勾選框。
  */
-export async function adminMayConfirmHost(bookingId, hostId) {
+export async function adminMaySave(bookingId) {
   const data = await fetchConflicts(bookingId);
   if (!data) return true;
 
-  const theirs = data.hosts.filter((c) => c.host_id === hostId);
-  if (!theirs.length) return true;
+  if (data.script.length) {
+    const ok = await scriptConflictDialog(data.script, {
+      tail: '請確保沒有衝突場次狀況發生',
+      confirmText: '依然切換',
+    });
+    if (!ok) return false;
+  }
 
-  // 名字取自查詢結果，不用畫面上的——同一份資料來源，不會對不上。
-  await blockDialog(`${theirs[0].host_name}有衝突場次`, theirs,
-    '該場次未取消前你不能確認衝突指定，請確認何者為正式場次');
-  return false;
-}
-
-/** 管理員切換狀態之前的檢查。回傳 true 代表可以切。 */
-export async function adminMaySwitch(bookingId) {
-  const data = await fetchConflicts(bookingId);
-  if (!data || !data.script.length) return true;
-  return scriptConflictDialog(data.script, {
-    tail: '請確保沒有衝突場次狀況發生',
-    confirmText: '依然切換',
-  });
+  // 全部被指派的主持人都要查，不是只查這次動到的那一個——管理員可能
+  // 一次改好幾格，只講其中一個會讓他改完再撞一次。
+  if (data.hosts.length) {
+    const names = [...new Set(data.hosts.map((c) => c.host_name))];
+    await blockDialog(
+      `${names.join('、')}有衝突場次`,
+      data.hosts.map((c) => ({ ...c, mmg_name: `${c.host_name}：${c.mmg_name}` })),
+      '該場次未取消前你不能確認衝突指定，請確認何者為正式場次',
+    );
+    return false;
+  }
+  return true;
 }
