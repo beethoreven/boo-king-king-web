@@ -532,3 +532,45 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
 }
+
+/* ── 劇本搜尋 ───────────────────────────────────────────── */
+
+/* 結果清單疊在下方，不推開底下的內容——它是暫時出現的，把整頁往下擠
+   會讓使用者正在看的東西跳位。 */
+.search-wrap { position: relative; }
+
+.search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  padding: 12px 18px;
+  cursor: pointer;
+}
+.search-hit:last-child { border-bottom: none; }
+.search-hit:hover { background: var(--surface-2); color: var(--accent); }
+
+.search-empty {
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--ink-faint);
+}

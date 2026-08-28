@@ -43,9 +43,26 @@ export function createBookingView() {
     'aria-label': '選擇劇本',
     onChange: (e) => pickScript(e.target.value),
   });
+  // 搜尋只在前端做。劇本清單在載入時就整包拿回來了，為了「打一個字」
+  // 再去打一支 API 是白花的——資料已經在手上。
+  const searchInput = el('input', {
+    type: 'text',
+    placeholder: '或輸入劇本名稱搜尋',
+    'aria-label': '搜尋劇本',
+    autocomplete: 'off',
+    onInput: () => renderSearchResults(),
+    // 離開欄位時把清單收起來。用 mousedown 而不是 click 綁在選項上
+    // （見 renderSearchResults），否則 blur 會先發生、選項在被點到之前
+    // 就消失了。
+    onBlur: () => setTimeout(() => { searchResults.hidden = true; }, 0),
+    onFocus: () => renderSearchResults(),
+  });
+  const searchResults = el('div', { class: 'search-results', hidden: true });
+
   const scriptSection = el('div', { class: 'section' }, [
     el('div', { class: 'section__label' }, '選擇劇本'),
     el('div', { class: 'select-wrap' }, scriptSelect),
+    el('div', { class: 'search-wrap' }, [searchInput, searchResults]),
   ]);
 
   // 劇本資訊標籤（純顯示，內容可以整批換掉，沒有焦點問題）
@@ -168,6 +185,41 @@ export function createBookingView() {
     // 同一筆預約，改了日期卻建立/回傳的是改之前那筆。
     requestId: null,
   };
+
+  /**
+   * 依輸入的字串篩出劇本，畫成可點的清單。
+   *
+   * 比對用「包含」而不是「開頭」：使用者記得的常常是中間那個字
+   * （打「雲」要找得到《竊雲台》）。大小寫一律轉小寫再比，英文名的
+   * 劇本才不會因為大小寫打錯就找不到。
+   *
+   * 沒有相符的就顯示「找不到」而不是空白——空白會讓人以為是還沒載完。
+   */
+  function renderSearchResults() {
+    const term = searchInput.value.trim().toLowerCase();
+    clear(searchResults);
+    if (!term) { searchResults.hidden = true; return; }
+
+    const hits = state.scripts.filter((s) => s.name.toLowerCase().includes(term));
+    if (!hits.length) {
+      searchResults.append(el('div', { class: 'search-empty' }, '找不到符合的劇本'));
+    }
+    for (const item of hits) {
+      searchResults.append(el('button', {
+        class: 'search-hit',
+        type: 'button',
+        // mousedown 而不是 click：輸入框的 blur 會先於 click 發生，
+        // 用 click 的話清單在被點到之前就已經藏起來了。
+        onMouseDown: (e) => {
+          e.preventDefault();
+          searchInput.value = item.name;
+          searchResults.hidden = true;
+          pickScript(String(item.id));
+        },
+      }, item.name));
+    }
+    searchResults.hidden = false;
+  }
 
   // ── 建構小工具 ──────────────────────────────────────────────
 
@@ -300,6 +352,9 @@ export function createBookingView() {
 
   async function pickScript(value) {
     state.mmgId = value;
+    // 兩個入口選出來的結果要一致：從下拉選的，搜尋欄也顯示同一個名字。
+    const picked = state.scripts.find((s) => String(s.id) === String(value));
+    searchInput.value = picked ? picked.name : '';
     resetBelowScript();
     state.detail = null;
     if (value) {
