@@ -22,7 +22,7 @@ const STATUS_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'gm_confirm', label: '等待其他主持確認' },
   { value: 'gm_reviewed', label: '等待訂金支付' },
-  { value: 'booked', label: '場次已確認' },
+  { value: 'booked', label: '場次已預約完成' },
 ];
 
 const EMPTY_FILTERS = {
