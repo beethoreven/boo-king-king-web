@@ -660,6 +660,14 @@ function endTime(start, hours) {
  * 先後順序，誰都還沒定案。
  */
 function slotMessage(slot) {
+  // 撞期排在最前面：額滿還可以等別人取消，包廂被佔著是這個時間根本開不成。
+  // 兩者都成立時，先講那個改時間才能解決的。
+  const c = slot.room_conflict;
+  if (c) {
+    const when = `${c.session_date.replace(/-/g, '/')} ${c.session_time}`;
+    return `本時段包廂已被《${c.mmg_name}》佔用（${when} 起 ${c.period} 小時`
+         + `，另需 ${c.reset_time_cost} 小時還原場地），請改選其他時間`;
+  }
   if (slot.is_full) return '本時段已額滿';
   const position = slot.taken + 1;
   if (slot.has_booked) {
