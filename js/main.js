@@ -16,6 +16,7 @@ import { createHostView } from './host.js';
 import { createAdminView } from './admin.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
+import { createMyBookingsView } from './mybookings.js';
 
 const app = document.getElementById('app');
 
@@ -36,6 +37,8 @@ const VIEWS = {
       start();
     }),
   },
+  mybookings: { label: '我預定的場次', minRole: 3, menuOnly: true,
+    build: () => createMyBookingsView() },
 };
 
 let currentView = 'booking';
@@ -66,7 +69,7 @@ function userMenu() {
 
   if (user) {
     items.push(['使用者資料', () => switchView('profile')]);
-    items.push(['我預定的場次', () => toast('這個功能還在做')]);
+    items.push(['我預定的場次', () => switchView('mybookings')]);
   }
   items.push(['登出', async () => { await logout(); start(); }]);
 
