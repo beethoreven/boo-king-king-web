@@ -38,7 +38,10 @@ export function createHostView() {
     // 每個頁籤各自記住自己的資料、頁碼與篩選條件
     tabs: Object.fromEntries(TABS.map((t) => [
       t.key,
-      { items: [], has_more: false, start: 1, filters: { ...EMPTY_FILTERS }, loading: true },
+      // stale：這一包的內容已經被別的動作改掉了，但使用者還沒切過來看。
+      // 標記起來、等他真的切過去再重抓，不要在他還沒要看的時候先打 API。
+      { items: [], has_more: false, start: 1, filters: { ...EMPTY_FILTERS },
+        loading: true, stale: false },
     ])),
     filterOpen: false,
     // 篩選器輸入中的暫存值。按下「篩選」才寫進 tabs[x].filters 並打 API——
@@ -117,6 +120,13 @@ export function createHostView() {
     state.tab = key;
     // 篩選條件是各頁籤自己的，切過去時把草稿同步成該頁籤目前生效的條件
     state.draft = { ...state.tabs[key].filters };
+    // 被標記過期的才重抓。這是「確認場次」之後那一包會走的路：
+    // 資料確實變了，但要等使用者真的想看才值得花那支 API。
+    if (state.tabs[key].stale) {
+      state.tabs[key].stale = false;
+      reloadTab(key);
+      return;
+    }
     render();
   }
 
@@ -167,11 +177,18 @@ export function createHostView() {
     try {
       await api.post(`/api/bookings/${item.id}/confirm`);
       toast('已確認主持指定');
-      // 確認之後這筆會從待確認移到已確認，兩包都要重抓。
-      // 這是唯一一個「一個動作影響兩個頁籤」的情況，所以刻意重載兩包，
-      // 而不是只重載當前頁籤。
-      await reloadTab('pending');
-      await reloadTab('confirmed');
+
+      // 確認之後這筆會從待確認移到已確認。兩包都變了，但兩包都重抓是
+      // 多花了兩支 API：
+      //
+      //   待確認——就是把這一列拿掉而已，畫面上的資料已經夠了，不需要
+      //           跟後端再要一次一模一樣的清單。
+      //   已確認——使用者現在人在待確認頁，那一包他還沒要看。先標記
+      //           過期，等他切過去再抓（見 switchTab）。
+      const pending = state.tabs.pending;
+      pending.items = pending.items.filter((x) => x.id !== item.id);
+      state.tabs.confirmed.stale = true;
+      render();
     } catch (err) {
       toast(err.message, { error: true });
     }
