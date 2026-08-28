@@ -8,11 +8,13 @@
  */
 
 import { setUnauthorizedHandler } from './api.js';
-import { refreshStatus, logout, getUser, hasRole, renderGoogleButton } from './auth.js';
+import { refreshStatus, logout, getUser, hasRole, renderGoogleButton,
+         getPendingRegistration } from './auth.js';
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
 import { createHostView } from './host.js';
 import { createAdminView } from './admin.js';
+import { createRegisterView } from './register.js';
 
 const app = document.getElementById('app');
 
@@ -100,15 +102,52 @@ function renderLogin(message) {
   );
   renderGoogleButton(buttonHolder, (user, err) => {
     if (err) {
-      // 403 = 帳號未獲授權。這跟「沒登入」是兩回事，不能叫他再登一次，
-      // 那只會繞一圈得到同樣的結果。
-      renderLogin(err.status === 403 ? '此帳號尚未獲得授權，請聯絡管理員' : err.message);
+      // 403 只剩一種原因了：帳號被停權。沒在名單裡的人現在會拿到 session
+      // 並走註冊流程，不再被擋在這裡。叫他再登一次沒有用，那只會繞一圈
+      // 得到同樣的結果。
+      renderLogin(err.status === 403
+        ? '此帳號已被停用，請聯絡店家' : err.message);
       return;
     }
+    // 登入成功但還沒註冊：留在這一頁，把註冊表單接在下面。
+    if (!user) { renderRegister(); return; }
     toast(`歡迎，${user.name || user.email}`);
     currentView = 'booking';
     renderApp();
   });
+}
+
+/**
+ * 登入完成、但還沒註冊時的畫面。
+ *
+ * 刻意保留上面那個標題區塊，讓它看起來是同一頁往下長出表單，而不是被
+ * 丟到另一個地方——使用者剛按完 Google 登入，畫面整個換掉會像是出錯了。
+ */
+function renderRegister() {
+  const pending = getPendingRegistration();
+  if (!pending) { renderLogin(); return; }
+
+  clear(app);
+  app.append(
+    el('div', { class: 'topbar' }, [
+      el('div', { class: 'topbar__brand' }, [brandIcon(), '步經徑']),
+      el('div', { class: 'topbar__actions' }, [
+        // 取消 = 登出。表單填一半不想註冊了，該回到登入頁，
+        // 而不是留著一張半吊子的 session。
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          onClick: async () => { await logout(); start(); },
+        }, '取消'),
+      ]),
+    ]),
+    el('div', { class: 'section', style: 'padding-top:32px;text-align:center' }, [
+      el('div', { style: 'font-size:20px;font-weight:700' }, '完成註冊'),
+    ]),
+    createRegisterView(pending.email, () => {
+      currentView = 'booking';
+      renderApp();
+    }),
+  );
 }
 
 async function start() {
@@ -116,6 +155,7 @@ async function start() {
   app.append(el('div', { class: 'loading' }, '載入中…'));
   const user = await refreshStatus();
   if (user) renderApp();
+  else if (getPendingRegistration()) renderRegister();
   else renderLogin();
 }
 

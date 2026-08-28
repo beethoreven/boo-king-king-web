@@ -18,8 +18,18 @@ const CLIENT_ID =
 
 let currentUser = null;
 
+// 已經登入（Google 驗過身分、手上有 session）但還沒在這個系統註冊的人。
+// 這是第三種狀態：既不是「沒登入」，也不是「登入了可以用」。
+// 被停權的人不會落在這裡——他註冊過，只是被關掉了，該看到的是別的訊息。
+let pendingRegistration = null;
+
 export function getUser() {
   return currentUser;
+}
+
+/** 已登入但還沒註冊時回傳 { email }，否則 null。 */
+export function getPendingRegistration() {
+  return pendingRegistration;
 }
 
 /** 目前登入者是否至少有這個等級的權限（1 管理員 ⊃ 2 主持人 ⊃ 3 玩家）。 */
@@ -38,13 +48,17 @@ export async function refreshStatus() {
   }
   try {
     const status = await api.get('/auth/status');
-    // authorized=false 代表 token 有效但帳號被停用——這不是「沒登入」，
-    // 訊息要跟「請重新登入」分開，不然使用者會一直重登卻永遠進不去。
+    // authorized=false 有兩種原因，要分開：
+    //   registered=false —— 還沒填聯絡資料，該給他註冊表單
+    //   registered=true  —— 註冊過但被停權，重登幾次都一樣，該叫他聯絡店家
     currentUser = status.authorized ? status : null;
+    pendingRegistration = (!status.authorized && !status.registered)
+      ? { email: status.email } : null;
     return currentUser;
   } catch {
     // 401 已經在 api.js 清掉 token 並觸發 handler
     currentUser = null;
+    pendingRegistration = null;
     return null;
   }
 }
@@ -53,7 +67,24 @@ export async function refreshStatus() {
 export async function loginWithGoogle(idToken) {
   const result = await api.post('/auth/login', { id_token: idToken });
   setToken(result.session_token);
+  // 沒註冊過的人一樣拿到 session——註冊那一步需要一張憑證來證明「填表的
+  // 就是剛才登入的那個 email」。回傳 null 讓呼叫端知道還不能進主畫面，
+  // 該走註冊。
+  if (result.registered === false) {
+    currentUser = null;
+    pendingRegistration = { email: result.email };
+    return null;
+  }
   currentUser = { ...result, authorized: true };
+  pendingRegistration = null;
+  return currentUser;
+}
+
+/** 送出註冊。成功之後手上那張 session 直接就能用，不必重新登入。 */
+export async function register(data) {
+  const result = await api.post('/auth/register', data);
+  currentUser = { ...result, authorized: true };
+  pendingRegistration = null;
   return currentUser;
 }
 

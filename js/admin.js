@@ -375,7 +375,7 @@ export function createAdminView() {
     const fill = (node) => {
       clear(node);
       const term = s.search.trim().toLowerCase();
-      // 姓名或 email 任一命中都算。管理員找人時記得的可能是哪一個都有。
+      // 稱呼或 email 任一命中都算。管理員找人時記得的可能是哪一個都有。
       const hits = term
         ? s.items.filter((u) => `${u.name ?? ''} ${u.email}`.toLowerCase().includes(term))
         : s.items;
@@ -389,7 +389,7 @@ export function createAdminView() {
 
     return el('div', {}, [
       addBar('＋ 新增使用者', () => { s.editing = emptyUser(); render(); },
-        searchBox(s, '搜尋姓名或 Email', listNode, fill)),
+        searchBox(s, '搜尋稱呼或 Email', listNode, fill)),
       el('div', { class: 'section' }, [listNode]),
     ]);
   }
@@ -428,7 +428,7 @@ export function createAdminView() {
         // 只有既有帳號才警告。新增時還沒有人在用這個 email，沒有東西會壞。
         warn: u.id ? '改動後該帳號將無法用原本的 Google 帳號登入，且對方無法自行修復' : null,
       }),
-      field({ label: '姓名', control: el('input', { type: 'text', value: u.name ?? '', onInput: setField('name') }) }),
+      field({ label: '稱呼', control: el('input', { type: 'text', value: u.name ?? '', onInput: setField('name') }) }),
       el('div', { class: 'row' }, [
         field({
           label: '角色',

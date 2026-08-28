@@ -588,3 +588,11 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
    在右邊不跟著捲走，所以用 margin-left:auto 推到底、並且不可壓縮。 */
 .tabs--with-action { align-items: center; }
 .tabs__action { margin-left: auto; flex: none; padding-left: 10px; }
+
+/* 註冊頁的說明框。文字裡有換行（用 \n 寫的），要讓它顯示出來。 */
+.notice {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  white-space: pre-line;
+}

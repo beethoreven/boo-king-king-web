@@ -137,7 +137,7 @@ export function createHostView() {
       await alertDialog({
         title: '預定者資料',
         body: [
-          `姓名：${p.name || '（未填）'}`,
+          `稱呼：${p.name || '（未填）'}`,
           `Email：${p.email}`,
           `LINE：${p.line_id || '（未填）'}`,
           `電話：${p.phone || '（未填）'}`,
