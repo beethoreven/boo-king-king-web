@@ -426,3 +426,66 @@ select option { background: var(--surface); color: var(--ink); }
 .checkline input:disabled { cursor: not-allowed; opacity: 0.4; }
 
 textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
+
+/* ── 日期時間輸入 ───────────────────────────────────────── */
+
+/* hidden 屬性靠 UA 樣式的 display:none 生效，特異性低於 .section 的
+   display:flex，會被蓋掉。用 JS 的 .hidden 控制顯示就必須補這一條。 */
+[hidden] { display: none !important; }
+
+/* 上排：日曆選擇器與時／分下拉。只是輸入輔助，真正的值在下排。 */
+.picker-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.picker-row .date-picker { flex: 1; min-width: 0; }
+.picker-row .select-wrap { flex-shrink: 0; }
+
+.time-select {
+  width: auto;
+  padding: 12px 32px 12px 10px;
+}
+
+/* 下排：五個獨立數字欄位，這才是送出時讀的來源。
+   刻意做成普通的 number 輸入——沒有「區段」的概念，
+   所以不會像 <input type="date"> 那樣打到一半被打斷。
+
+   ★ 選擇器要寫成 .dt-row input.dt-input，不能只寫 .dt-input：
+     上面的基礎規則 input[type="number"] 特異性是 (0,1,1)，只用一個
+     class 是 (0,1,0)，會輸給它——內距與寬度都蓋不掉，placeholder
+     會被 18px 的左右內距擠到裁切。這裡用 (0,2,1) 確保贏。 */
+.dt-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+.dt-row input.dt-input {
+  width: auto;
+  flex: none;
+  text-align: center;
+  padding: 12px 2px;
+  -moz-appearance: textfield;
+  min-width: 0;
+}
+
+/* 數字欄位的上下箭頭在這種窄欄位裡只會擋到字 */
+.dt-row input.dt-input::-webkit-outer-spin-button,
+.dt-row input.dt-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dt-row input.dt-input--year { width: 64px; }
+.dt-row input.dt-input--short { width: 42px; }
+
+.dt-unit {
+  color: var(--ink-faint);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}

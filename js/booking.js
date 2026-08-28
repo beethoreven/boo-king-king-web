@@ -3,88 +3,152 @@
  *
  * 互動規則（依先前討論定案）：
  *   - 選了劇本，下面才顯示其他區塊
- *   - 選了日期，時間才解鎖（為「不同日期開放不同時段」預留）
  *   - 選了主持人才打 API 驗證是否撞期
  *   - 同一個選項重選同一個值，直接沿用上次的錯誤，不重打 API
  *   - 選單類錯誤用 toast + 欄位紅色驚嘆號；送出前的彙總用對話框
+ *
+ * ★ 畫面骨架只建立一次，render() 從不重建 DOM，只同步值、文字與顯示與否。
+ *
+ *   先前的寫法是每次 render() 都 clear(root) 再全部重畫，那是「打到日就
+ *   跳掉」的真正原因：<input type="date"> 內部是年/月/日三個區段，使用者
+ *   還停在「日」那一段時 change 就已經觸發，接著 render() 一跑，
+ *   root.replaceChildren() 把所有子節點卸下——**節點一離開 DOM 焦點就沒了**，
+ *   再 append 回去也救不回來。
+ *
+ *   曾經試過「把輸入框做成持久節點」，那不夠：焦點跟著的是「有沒有被卸下」，
+ *   不是「是不是同一個節點物件」。持久節點只保住值，保不住焦點。唯一的解法
+ *   是根本不要卸它——所以這裡改成骨架長駐、render() 只做同步。
  */
 
 import { api, ApiError } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
+import { el, clear, toast, confirmDialog, alertDialog } from './ui.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
 const EMPTY_HOSTS = [null, null, null, null];
 
-// 時與分的選項。分只給整點與半點——場次時間是以半小時為單位的約定，
-// 給 60 個選項只會讓人多滑。
-const HOURS = Array.from({ length: 24 }, (_, i) => {
-  const v = String(i).padStart(2, '0');
-  return { value: v, label: v };
-});
-const MINUTES = ['00', '30'].map((v) => ({ value: v, label: v }));
+// 時與分的下拉選項。分只給整點與半點——場次時間是以半小時為單位的約定，
+// 給 60 個選項只會讓人多滑。想打其他分鐘數的，用下面那排手動欄位。
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const MINUTE_OPTIONS = ['00', '30'];
+
+const pad = (n, width) => String(n).padStart(width, '0');
 
 export function createBookingView() {
   const root = el('div', { class: 'view' });
 
-  // 日期輸入框只建立一次，之後每次 render 都沿用同一個節點。
-  //
-  // ★ 這是刻意的，不是效能優化。<input type="date"> 內部是「年/月/日」
-  //   三個區段，使用者打完年、月，焦點停在「日」那一段時，change 事件
-  //   已經觸發過了。如果那時整個畫面重建、這個 input 被換成新節點，
-  //   焦點與正在編輯的區段會一起消失，使用者永遠打不完最後一段。
-  //   （實際回報過的 bug：年正常、月正常，一打到日就跳掉。）
-  //
-  //   fireless-war 沒有這個問題，因為它的日期欄位是寫死在 HTML 裡的
-  //   靜態節點、從不重建。這裡用同樣的原則：輸入類元件持久化，
-  //   只有純顯示的部分才隨 render 重畫。
-  const dateInput = el('input', {
-    type: 'date',
-    'aria-label': '選擇日期',
-    onChange: (e) => pickDate(e.target.value),
-  });
-  const hourSelect = el('select', {
-    'aria-label': '選擇小時',
-    onChange: (e) => pickTimePart('hour', e.target.value),
-  });
-  const minuteSelect = el('select', {
-    'aria-label': '選擇分鐘',
-    onChange: (e) => pickTimePart('minute', e.target.value),
-  });
-  for (const opt of [{ value: '', label: '--' }, ...HOURS]) {
-    hourSelect.append(el('option', { value: opt.value }, opt.label));
-  }
-  for (const opt of [{ value: '', label: '--' }, ...MINUTES]) {
-    minuteSelect.append(el('option', { value: opt.value }, opt.label));
-  }
+  // ── 骨架：以下節點在這裡建立一次，之後永遠不重建、不卸下 ──────────
 
-  // 「場次」整個區塊也是持久的，不只裡面的輸入框。
+  // 劇本
+  const scriptSelect = el('select', {
+    'aria-label': '選擇劇本',
+    onChange: (e) => pickScript(e.target.value),
+  });
+  const scriptSection = el('div', { class: 'section' }, [
+    el('div', { class: 'section__label' }, '選擇劇本'),
+    el('div', { class: 'select-wrap' }, scriptSelect),
+  ]);
+
+  // 劇本資訊標籤（純顯示，內容可以整批換掉，沒有焦點問題）
+  const tagRow = el('div', { class: 'tag-row' });
+  const tagSection = el('div', { class: 'section' }, [tagRow]);
+
+  // 場次 —— 兩排，抄 fireless-war 的做法
   //
-  // ★ 光是「重用同一個 input 節點」還不夠：clear(root) 會把它從 DOM
-  //   移除再插回去，而瀏覽器在節點離開文件時就會撤銷焦點。實測過
-  //   節點相同（sameNode: true）但焦點仍然掉了。所以整塊都不參與
-  //   重繪，只更新裡面會變的文字。
+  // 上排是「輸入輔助」：日曆選擇器與時／分下拉，方便快速選。
+  // 下排是「資料來源」：五個獨立的數字欄位，送出時只讀這裡。
+  //
+  // ★ 為什麼要有下排：<input type="date"> 是瀏覽器的多區段元件，它什麼時候
+  //   觸發 change、焦點停在哪一段，我們控制不了。把它降級成純輔助之後，
+  //   就算它行為古怪也只是往下排寫一次值，不影響任何事。而下排是普通的
+  //   數字輸入，沒有「區段」的概念，結構上不可能打到一半跳掉。
+  //   這也是 fireless-war 那個介面好用的原因：picker 只是捷徑，不是必經之路。
+  const datePicker = el('input', {
+    type: 'date',
+    class: 'date-picker',
+    'aria-label': '用日曆選擇日期',
+    onChange: () => {
+      if (!datePicker.value) return;
+      const [y, mo, d] = datePicker.value.split('-');
+      fieldYear.value = Number(y);
+      fieldMonth.value = Number(mo);
+      fieldDay.value = Number(d);
+      readManualFields();
+      refreshSlot();
+    },
+  });
+  const hourPicker = buildPicker('用下拉選擇小時', HOUR_OPTIONS, (v) => {
+    fieldHour.value = Number(v);
+    readManualFields();
+    refreshSlot();
+  });
+  const minutePicker = buildPicker('用下拉選擇分鐘', MINUTE_OPTIONS, (v) => {
+    fieldMinute.value = Number(v);
+    readManualFields();
+    refreshSlot();
+  });
+
+  const fieldYear = buildNumberField('YYYY', 1970, 9999, 'dt-input--year');
+  const fieldMonth = buildNumberField('MM', 1, 12);
+  const fieldDay = buildNumberField('DD', 1, 31);
+  const fieldHour = buildNumberField('hh', 0, 23);
+  const fieldMinute = buildNumberField('mm', 0, 59);
+
   const timeHint = el('div', { class: 'field__hint' });
   const slotHint = el('div', { class: 'field__hint' });
+
   const slotSection = el('div', { class: 'section' }, [
     el('div', { class: 'section__label' }, '場次'),
-    el('div', { class: 'row' }, [
-      field({ label: '日期', control: dateInput }),
-      field({ label: '時', control: el('div', { class: 'select-wrap' }, hourSelect) }),
-      field({ label: '分', control: el('div', { class: 'select-wrap' }, minuteSelect) }),
+    el('div', { class: 'field' }, [
+      el('div', { class: 'field__label' }, '選擇日期時間'),
+      el('div', { class: 'picker-row' }, [
+        datePicker,
+        el('div', { class: 'select-wrap' }, hourPicker),
+        el('span', { class: 'dt-unit' }, '時'),
+        el('div', { class: 'select-wrap' }, minutePicker),
+        el('span', { class: 'dt-unit' }, '分'),
+      ]),
+    ]),
+    el('div', { class: 'field' }, [
+      el('div', { class: 'field__label' }, '日期時間'),
+      el('div', { class: 'dt-row' }, [
+        fieldYear, el('span', { class: 'dt-unit' }, '年'),
+        fieldMonth, el('span', { class: 'dt-unit' }, '月'),
+        fieldDay, el('span', { class: 'dt-unit' }, '日'),
+        fieldHour, el('span', { class: 'dt-unit' }, '時'),
+        fieldMinute, el('span', { class: 'dt-unit' }, '分'),
+      ]),
     ]),
     timeHint,
     slotHint,
   ]);
 
+  // 主持人。角色的數量與名稱只在換劇本時才變，所以只有換劇本才重建這一段；
+  // 選了人之後只更新既有節點的值與錯誤文字，不重畫。
+  const hostList = el('div', { class: 'list' });
+  const hostSection = el('div', { class: 'section' }, [
+    el('div', { class: 'section__label' }, '選擇主持人'),
+    hostList,
+  ]);
+  let hostRows = [];          // [{ wrap, sel, errNode }]
+  let hostRowsBuiltFor = null; // 已經照哪一個 mmg id 建過
+
+  const submitBtn = el('button', { class: 'btn btn--primary', onClick: submit }, '立即預約');
+  const submitSection = el('div', { class: 'section', style: 'padding-bottom: 20px' }, [submitBtn]);
+
+  root.append(
+    scriptSection, tagSection, slotSection, hostSection,
+    el('div', { class: 'spacer' }), submitSection,
+  );
+
+  // ── 狀態 ────────────────────────────────────────────────────
+
   const state = {
     scripts: [],
     mmgId: '',
     detail: null,       // 選中劇本的完整資料
-    date: '',
-    // 時與分分開存。用兩個下拉而不是 <input type="time">，理由同上：
-    // 下拉選單選完就結束，沒有「還在輸入中」的中間狀態會被重繪打斷。
-    hour: '',
-    minute: '',
+    // 日期時間的真正來源是下排那五個欄位，state 只是它們的鏡像。
+    // 存字串不存數字：使用者可能只打了一半（"20"），那不是 20 年。
+    y: '', mo: '', d: '', h: '', mi: '',
     hosts: [...EMPTY_HOSTS],
     hostErrors: [null, null, null, null],
     // 已經驗證過的主持人選擇，避免重選同一個值又打一次 API。
@@ -99,20 +163,126 @@ export function createBookingView() {
     requestId: null,
   };
 
+  // ── 建構小工具 ──────────────────────────────────────────────
+
+  function buildPicker(ariaLabel, values, onPick) {
+    const sel = el('select', {
+      class: 'time-select',
+      'aria-label': ariaLabel,
+      onChange: (e) => {
+        if (e.target.value === '') return;
+        state.requestId = null;
+        onPick(e.target.value);
+      },
+    });
+    sel.append(el('option', { value: '' }, '--'));
+    for (const v of values) sel.append(el('option', { value: v }, v));
+    return sel;
+  }
+
+  /** 下排的一格。input 事件同步 state，change（離開欄位）才去查時段。 */
+  function buildNumberField(placeholder, min, max, extraClass = 'dt-input--short') {
+    return el('input', {
+      type: 'number',
+      class: `dt-input ${extraClass}`,
+      placeholder,
+      min: String(min),
+      max: String(max),
+      inputmode: 'numeric',
+      'aria-label': placeholder,
+      // 打字時只更新 state 與提示文字，不打 API、不碰任何輸入框的值。
+      onInput: () => { readManualFields(); syncHints(); },
+      // 離開欄位（或按 Enter）才算「這一格填完了」，這時才值得打 API。
+      onChange: () => { readManualFields(); refreshSlot(); },
+    });
+  }
+
+  // ── 日期時間 ────────────────────────────────────────────────
+
+  /** 把下排五格的內容抄進 state。這是唯一的讀取來源。 */
+  function readManualFields() {
+    state.requestId = null;
+    state.slot = null;
+    state.y = fieldYear.value.trim();
+    state.mo = fieldMonth.value.trim();
+    state.d = fieldDay.value.trim();
+    state.h = fieldHour.value.trim();
+    state.mi = fieldMinute.value.trim();
+  }
+
+  /** 五格都填了且是真實存在的日期才回傳 YYYY-MM-DD，否則空字串。 */
+  function currentDate() {
+    if (!state.y || !state.mo || !state.d) return '';
+    const y = Number(state.y), mo = Number(state.mo), d = Number(state.d);
+    if (!Number.isInteger(y) || y < 1970 || y > 9999) return '';
+    if (!Number.isInteger(mo) || mo < 1 || mo > 12) return '';
+    if (!Number.isInteger(d) || d < 1 || d > 31) return '';
+    // 擋掉 2 月 31 日這種「每一格都在範圍內、湊起來不存在」的日期。
+    const probe = new Date(y, mo - 1, d);
+    if (probe.getFullYear() !== y || probe.getMonth() !== mo - 1 || probe.getDate() !== d) return '';
+    return `${pad(y, 4)}-${pad(mo, 2)}-${pad(d, 2)}`;
+  }
+
+  function currentTime() {
+    if (state.h === '' || state.mi === '') return '';
+    const h = Number(state.h), mi = Number(state.mi);
+    if (!Number.isInteger(h) || h < 0 || h > 23) return '';
+    if (!Number.isInteger(mi) || mi < 0 || mi > 59) return '';
+    return `${pad(h, 2)}:${pad(mi, 2)}`;
+  }
+
+  // 送出過的時段查詢流水號。只有最後一次發出的請求可以寫入 state.slot。
+  //
+  // ★ 沒有這道閘門會顯示錯的空位狀況：使用者連續改日期時會發出多個請求，
+  //   回應的順序不保證跟送出的順序一樣。先送的晚回來，就會把後送的結果
+  //   蓋掉——畫面上寫著「可預約」，講的卻是使用者已經改掉的那個時段。
+  //   實測時就是這樣現形的：把月改成 2（合法，發出請求），再把日改成 31
+  //   （不存在的日期），舊回應仍然把提示寫成「可進行預約」。
+  let slotSeq = 0;
+
+  /** 日期時間齊全就去查該時段的排隊狀況。 */
+  async function refreshSlot() {
+    syncHints();
+    const seq = ++slotSeq;
+    const date = currentDate();
+    const time = currentTime();
+    if (!date || !time || !state.mmgId) { render(); return; }
+    try {
+      const slot = await api.get(`/api/mmg/${state.mmgId}/slot`, {
+        session_date: date, session_time: time,
+      });
+      if (seq !== slotSeq) return;   // 期間又改過，這份回應已經過期
+      state.slot = slot;
+    } catch (err) {
+      if (seq !== slotSeq) return;
+      toast(err.message, { error: true });
+    }
+    render();
+  }
+
+  // ── 載入與重設 ──────────────────────────────────────────────
+
   async function load() {
     try {
       state.scripts = await api.get('/api/mmg');
     } catch (err) {
       toast(err.message, { error: true });
     }
+    clear(scriptSelect);
+    scriptSelect.append(el('option', { value: '' }, '請選擇劇本'));
+    for (const s of state.scripts) {
+      scriptSelect.append(el('option', { value: s.id }, s.name));
+    }
     render();
   }
 
   function resetBelowScript() {
     state.requestId = null;
-    state.date = '';
-    state.hour = '';
-    state.minute = '';
+    state.y = ''; state.mo = ''; state.d = ''; state.h = ''; state.mi = '';
+    for (const f of [fieldYear, fieldMonth, fieldDay, fieldHour, fieldMinute]) f.value = '';
+    datePicker.value = '';
+    hourPicker.value = '';
+    minutePicker.value = '';
     state.hosts = [...EMPTY_HOSTS];
     state.hostErrors = [null, null, null, null];
     state.hostChecked.clear();
@@ -133,40 +303,29 @@ export function createBookingView() {
     render();
   }
 
-  function pickDate(value) {
-    state.requestId = null;
-    state.date = value;
-    // 換日期時清掉時間：不同日期可能開放不同時段，留著上一個日期選過的
-    // 時間會看起來像已經選好，其實那個時段在新日期可能根本不存在。
-    state.hour = '';
-    state.minute = '';
-    state.slot = null;
-    render();
-  }
+  // ── 主持人 ──────────────────────────────────────────────────
 
-  /** 「時」與「分」任一個改變時呼叫。兩個都選了才去查該時段的狀況。 */
-  async function pickTimePart(part, value) {
-    state.requestId = null;
-    state[part] = value;
-    state.slot = null;
-    const time = currentTime();
-    if (time && state.mmgId && state.date) {
-      try {
-        state.slot = await api.get(`/api/mmg/${state.mmgId}/slot`, {
-          session_date: state.date,
-          session_time: time,
-        });
-      } catch (err) {
-        toast(err.message, { error: true });
-      }
+  function buildHostRows(d) {
+    clear(hostList);
+    hostRows = [];
+    for (const gm of d.gm_slots) {
+      const sel = el('select', {
+        'aria-label': `選擇「${gm.name}」的主持人`,
+        onChange: (e) => pickHost(gm.slot - 1, e.target.value),
+      });
+      sel.append(el('option', { value: '' }, '未選擇'));
+      for (const h of gm.hosts) sel.append(el('option', { value: h.id }, h.name));
+
+      const errNode = el('div', { class: 'field__error' });
+      const wrap = el('div', { class: 'field' }, [
+        el('div', { class: 'field__label' }, gm.name),
+        el('div', { class: 'select-wrap' }, sel),
+        errNode,
+      ]);
+      hostList.append(wrap);
+      hostRows.push({ wrap, sel, errNode, slotIndex: gm.slot - 1 });
     }
-    render();
-  }
-
-  /** 時與分都選了才算一個完整時間，否則回傳空字串。 */
-  function currentTime() {
-    if (state.hour === '' || state.minute === '') return '';
-    return `${state.hour}:${state.minute}`;
+    hostRowsBuiltFor = d.id;
   }
 
   async function pickHost(slotIndex, value) {
@@ -199,8 +358,10 @@ export function createBookingView() {
       return;
     }
 
-    // 還沒選日期時間就沒得驗證，等送出時後端會擋
-    if (!state.date || !currentTime()) {
+    // 還沒填完日期時間就沒得驗證，等送出時後端會擋
+    const date = currentDate();
+    const time = currentTime();
+    if (!date || !time) {
       state.hostErrors[slotIndex] = null;
       render();
       return;
@@ -209,8 +370,8 @@ export function createBookingView() {
     try {
       await api.get('/api/bookings/check-host', {
         mmg_id: state.mmgId,
-        session_date: state.date,
-        session_time: currentTime(),
+        session_date: date,
+        session_time: time,
         user_id: userId,
       });
       state.hostChecked.set(key, null);
@@ -224,19 +385,26 @@ export function createBookingView() {
     render();
   }
 
+  // ── 送出 ────────────────────────────────────────────────────
+
   /** 送出前的完整檢查，回傳錯誤訊息陣列。 */
   function collectProblems() {
     const problems = [];
     if (!state.mmgId) problems.push('尚未選擇劇本');
-    if (!state.date) problems.push('尚未選擇日期');
-    if (!currentTime()) problems.push('尚未選擇時間');
 
-    for (const [i, gm] of (state.detail?.gm_slots ?? []).entries()) {
+    // 分辨「還沒填」與「填了但不對」，後者要講清楚哪裡不對。
+    if (!state.y || !state.mo || !state.d) problems.push('日期尚未填寫完整');
+    else if (!currentDate()) problems.push(`日期不正確：${state.y}/${state.mo}/${state.d}`);
+
+    if (state.h === '' || state.mi === '') problems.push('時間尚未填寫完整');
+    else if (!currentTime()) problems.push(`時間不正確：${state.h}:${state.mi}`);
+
+    for (const gm of state.detail?.gm_slots ?? []) {
       if (state.hosts[gm.slot - 1] === null) {
         problems.push(`「${gm.name}」尚未選擇主持人`);
       }
     }
-    for (const [i, err] of state.hostErrors.entries()) {
+    for (const err of state.hostErrors) {
       if (err) problems.push(err);
     }
     return problems;
@@ -245,16 +413,15 @@ export function createBookingView() {
   async function submit() {
     const problems = collectProblems();
     if (problems.length) {
-      await alertDialog({
-        title: '無法送出預約',
-        body: problems.join('\n'),
-      });
+      await alertDialog({ title: '無法送出預約', body: problems.join('\n') });
       return;
     }
 
+    const date = currentDate();
+    const time = currentTime();
     const ok = await confirmDialog({
       title: '確認預約',
-      body: `${state.detail.name}\n${state.date} ${currentTime()}\n訂金 NT$ ${state.detail.booking_cost ?? 0}`,
+      body: `${state.detail.name}\n${date} ${time}\n訂金 NT$ ${state.detail.booking_cost ?? 0}`,
       confirmText: '送出預約',
     });
     if (!ok) return;
@@ -268,14 +435,14 @@ export function createBookingView() {
       //   但「同一次意圖」不是「同一個 state 物件」——只要使用者在這之間
       //   改了日期、時間或主持人，那就是另一筆預約，絕不能沿用舊的 id，
       //   不然會被後端的 ON CONFLICT 誤判成同一筆，回傳/鎖住的是改之前
-      //   那個時段。所以 requestId 只存在這裡：pickDate／pickTimePart／
-      //   pickHost／resetBelowScript 任何一個都會先把它清成 null，逼這裡
-      //   重新產生一組；只有「什麼都沒改、單純重按送出」才會沿用。
+      //   那個時段。所以 requestId 只存在這裡：readManualFields／pickHost／
+      //   resetBelowScript 任何一個都會先把它清成 null，逼這裡重新產生一組；
+      //   只有「什麼都沒改、單純重按送出」才會沿用。
       if (!state.requestId) state.requestId = crypto.randomUUID();
       const result = await api.post('/api/bookings', {
         mmg_id: Number(state.mmgId),
-        session_date: state.date,
-        session_time: currentTime(),
+        session_date: date,
+        session_time: time,
         gm_user_ids: state.hosts,
         request_id: state.requestId,
       });
@@ -283,6 +450,7 @@ export function createBookingView() {
       resetBelowScript();
       state.mmgId = '';
       state.detail = null;
+      scriptSelect.value = '';
     } catch (err) {
       // 刻意不清 requestId：失敗可能是請求根本沒送到（例如 failed to
       // fetch），也可能是送到了、寫入成功但回應在路上遺失——兩種都要讓
@@ -295,94 +463,69 @@ export function createBookingView() {
     }
   }
 
+  // ── 同步（不重建）──────────────────────────────────────────
+
+  /** 只更新兩行提示文字。打字時走這條，不碰任何輸入框。 */
+  function syncHints() {
+    const time = currentTime();
+    const period = state.detail?.period;
+    timeHint.textContent = time && period != null
+      ? `預計 ${endTime(time, period)} 結束` : '';
+    slotHint.textContent = state.slot ? slotMessage(state.slot) : '';
+  }
+
+  /**
+   * 把 state 反映到既有節點上。
+   *
+   * ★ 這裡不建立、不移除、不重新插入任何節點——只改 value、textContent、
+   *   hidden 與 disabled。輸入中的欄位因此不會失去焦點。
+   *   寫 value 前一律先比對，相同就不寫：對聚焦中的輸入框指派 value
+   *   （即使是同一個字串）在部分瀏覽器會重置游標位置。
+   */
   function render() {
-    clear(root);
-
-    // 劇本選單本身就是頁面標題
-    root.append(
-      el('div', { class: 'section' }, [
-        el('div', { class: 'section__label' }, '選擇劇本'),
-        select({
-          options: [
-            { value: '', label: '請選擇劇本' },
-            ...state.scripts.map((s) => ({ value: s.id, label: s.name })),
-          ],
-          value: state.mmgId,
-          onChange: pickScript,
-          ariaLabel: '選擇劇本',
-        }),
-      ]),
-    );
-
-    if (!state.detail) return;
+    if (scriptSelect.value !== String(state.mmgId)) scriptSelect.value = state.mmgId;
 
     const d = state.detail;
-    root.append(
-      el('div', { class: 'section' }, [
-        el('div', { class: 'tag-row' }, [
-          d.period != null && el('div', { class: 'tag' }, `${d.period} 小時`),
-          d.players && el('div', { class: 'tag' }, `${d.players} 人`),
-          d.price != null && el('div', { class: 'tag' }, `NT$ ${d.price}`),
-          d.booking_cost != null && el('div', { class: 'tag' }, `訂金 NT$ ${d.booking_cost}`),
-        ]),
-      ]),
-    );
+    const show = Boolean(d);
+    tagSection.hidden = !show;
+    slotSection.hidden = !show;
+    submitSection.hidden = !show;
+    hostSection.hidden = !show || !d.gm_slots.length;
+    if (!show) return;
 
-    // 場次區塊是持久節點（見上方宣告），這裡只同步值與提示文字。
-    // 刻意不重建：重建會讓正在輸入的日期欄位失去焦點。
-    //
-    // 只在值真的不同時才寫回 input——對聚焦中的 <input type="date">
-    // 指派 value（即使是同一個值）會重置它內部正在編輯的區段。
-    if (dateInput.value !== state.date) dateInput.value = state.date;
-    if (hourSelect.value !== state.hour) hourSelect.value = state.hour;
-    if (minuteSelect.value !== state.minute) minuteSelect.value = state.minute;
-    hourSelect.disabled = !state.date;
-    minuteSelect.disabled = !state.date;
-
-    const time = currentTime();
-    timeHint.textContent = time && d.period != null
-      ? `預計 ${endTime(time, d.period)} 結束` : '';
-    slotHint.textContent = state.slot ? slotMessage(state.slot) : '';
-    root.append(slotSection);
-
-    // 主持人：每個存在的角色一列
-    if (d.gm_slots.length) {
-      root.append(
-        el('div', { class: 'section' }, [
-          el('div', { class: 'section__label' }, '選擇主持人'),
-          el(
-            'div',
-            { class: 'list' },
-            d.gm_slots.map((gm) =>
-              field({
-                label: gm.name,
-                error: state.hostErrors[gm.slot - 1],
-                control: select({
-                  options: [
-                    { value: '', label: '未選擇' },
-                    ...gm.hosts.map((h) => ({ value: h.id, label: h.name })),
-                  ],
-                  value: state.hosts[gm.slot - 1] ?? '',
-                  onChange: (v) => pickHost(gm.slot - 1, v),
-                  ariaLabel: `選擇「${gm.name}」的主持人`,
-                }),
-              }),
-            ),
-          ),
-        ]),
-      );
+    clear(tagRow);
+    for (const tag of [
+      d.period != null && `${d.period} 小時`,
+      d.players && `${d.players} 人`,
+      d.price != null && `NT$ ${d.price}`,
+      d.booking_cost != null && `訂金 NT$ ${d.booking_cost}`,
+    ]) {
+      if (tag) tagRow.append(el('div', { class: 'tag' }, tag));
     }
 
-    root.append(el('div', { class: 'spacer' }));
-    root.append(
-      el('div', { class: 'section', style: 'padding-bottom: 20px' }, [
-        el('button', {
-          class: 'btn btn--primary',
-          disabled: state.submitting,
-          onClick: submit,
-        }, state.submitting ? '送出中…' : '立即預約'),
-      ]),
-    );
+    // 上排 picker 只是輔助，這裡把它對齊到下排目前的值，讓它看起來一致。
+    // 下排（真正的來源）不在這裡寫回去——那是使用者正在打字的地方。
+    const date = currentDate();
+    if (datePicker.value !== date) datePicker.value = date;
+    const hh = state.h === '' ? '' : pad(Number(state.h), 2);
+    const mm = state.mi === '' ? '' : pad(Number(state.mi), 2);
+    if (hourPicker.value !== hh) hourPicker.value = HOUR_OPTIONS.includes(hh) ? hh : '';
+    if (minutePicker.value !== mm) minutePicker.value = MINUTE_OPTIONS.includes(mm) ? mm : '';
+
+    syncHints();
+
+    if (d.gm_slots.length && hostRowsBuiltFor !== d.id) buildHostRows(d);
+    for (const row of hostRows) {
+      const value = state.hosts[row.slotIndex] ?? '';
+      if (row.sel.value !== String(value)) row.sel.value = value;
+      const err = state.hostErrors[row.slotIndex];
+      row.errNode.textContent = err ?? '';
+      row.errNode.hidden = !err;
+      row.wrap.className = `field${err ? ' field--error' : ''}`;
+    }
+
+    submitBtn.disabled = state.submitting;
+    submitBtn.textContent = state.submitting ? '送出中…' : '立即預約';
   }
 
   load();
@@ -392,9 +535,7 @@ export function createBookingView() {
 function endTime(start, hours) {
   const [h, m] = start.split(':').map(Number);
   const total = h * 60 + m + Math.round(hours * 60);
-  const hh = String(Math.floor(total / 60) % 24).padStart(2, '0');
-  const mm = String(total % 60).padStart(2, '0');
-  return `${hh}:${mm}`;
+  return `${pad(Math.floor(total / 60) % 24, 2)}:${pad(total % 60, 2)}`;
 }
 
 function slotMessage(slot) {
