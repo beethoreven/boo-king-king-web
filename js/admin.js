@@ -147,15 +147,33 @@ export function createAdminView() {
 
   // ── 儲存 ────────────────────────────────────────────────
 
-  /** 新增走 POST、編輯走 PUT。只有編輯才有「無任何修改」這個結果。 */
+  /**
+   * 新增走 POST、編輯走 PUT。只有編輯才有「無任何修改」這個結果。
+   *
+   * onDone 會收到後端回傳的那一筆。呼叫端拿它換掉清單裡對應的那一列就好，
+   * 不必整包重抓——除了這一筆之外，清單上其他資料一個字都沒變。
+   */
   async function save(path, body, onDone, { create = false } = {}) {
     try {
       const r = create ? await api.post(path, body) : await api.put(path, body);
       toast(create ? '已新增' : (r.changed ? '已儲存' : '無任何修改'));
-      onDone();
+      onDone(create ? r : r.item);
     } catch (err) {
       await alertDialog({ title: create ? '新增失敗' : '儲存失敗', body: err.message });
     }
+  }
+
+  /**
+   * 把儲存後的那一筆放回清單：既有的換掉，新的加到最後。
+   *
+   * 這是為了不要為了「改一列」而重抓整份清單。後端 PUT/POST 回傳的形狀
+   * 跟清單用的是同一個 _row_to_dict，可以直接替換。
+   * （場次不走這條——它的清單與單筆查詢形狀不同，而且改狀態會讓那一筆
+   *   跳到別的子頁籤去，見下方。）
+   */
+  function upsert(items, saved) {
+    const i = items.findIndex((x) => x.id === saved.id);
+    if (i === -1) items.push(saved); else items[i] = saved;
   }
 
   /** 清單上方的「新增」列。三個頁籤共用。 */
@@ -265,7 +283,8 @@ export function createAdminView() {
           class: 'btn btn--primary btn--small',
           onClick: () => save(
             m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', m,
-            () => { s.editing = null; loadMmg(); }, { create: !m.id },
+            (saved) => { upsert(s.items, saved); s.editing = null; render(); },
+            { create: !m.id },
           ),
         }, m.id ? '儲存' : '新增'),
       ]),
@@ -424,7 +443,8 @@ export function createAdminView() {
             }
             save(
               u.id ? `/api/admin/users/${u.id}` : '/api/admin/users', u,
-              () => { s.editing = null; loadUsers(); }, { create: !u.id },
+              (saved) => { upsert(s.items, saved); s.editing = null; render(); },
+              { create: !u.id },
             );
           },
         }, u.id ? '儲存' : '新增'),
