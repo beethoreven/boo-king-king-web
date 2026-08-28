@@ -77,6 +77,29 @@ export function createHostView() {
     render();
   }
 
+  /**
+   * 開合篩選面板。收起時如果還有條件生效，一併清掉並重載。
+   *
+   * 「收起篩選器」在使用者眼中就是「不篩了」。原本只是把面板藏起來、條件
+   * 照舊，而清除按鈕在面板裡——藏起來之後就沒有任何路可以回到完整清單，
+   * 只能重新整理。那是死路，不是設計。
+   *
+   * 沒有生效中的條件就只是單純收合，不必為此打一支 API。
+   */
+  function closeOrOpenFilter() {
+    const closing = state.filterOpen;
+    state.filterOpen = !state.filterOpen;
+    const tab = state.tabs[state.tab];
+    if (closing && hasActiveFilter(tab.filters)) {
+      state.draft = { ...EMPTY_FILTERS };
+      tab.filters = { ...EMPTY_FILTERS };
+      tab.start = 1;
+      reloadTab(state.tab);
+      return;
+    }
+    render();
+  }
+
   function applyFilters() {
     const tab = state.tabs[state.tab];
     tab.filters = { ...state.draft };
@@ -260,7 +283,7 @@ export function createHostView() {
       el('div', { class: 'section toolbar' }, [
         el('button', {
           class: 'btn btn--ghost btn--small',
-          onClick: () => { state.filterOpen = !state.filterOpen; render(); },
+          onClick: () => closeOrOpenFilter(),
         }, state.filterOpen ? '收起篩選器' : '篩選器'),
         hasActiveFilter(tab.filters) && el('div', { class: 'field__hint' }, '篩選中'),
       ]),

@@ -490,7 +490,21 @@ export function createAdminView() {
       el('div', { class: 'section toolbar' }, [
         el('button', {
           class: 'btn btn--ghost btn--small',
-          onClick: () => { b.filterOpen = !b.filterOpen; render(); },
+          // 收起 = 不篩了。條件留著卻把清除按鈕藏進收合的面板裡，
+          // 使用者就沒有路回到完整清單了（見 host.js 的同一段說明）。
+          onClick: () => {
+            const closing = b.filterOpen;
+            b.filterOpen = !b.filterOpen;
+            const active = Object.values(t.filters).some((v) => v !== '');
+            if (closing && active) {
+              b.draft = { ...EMPTY_BOOKING_FILTERS };
+              t.filters = { ...EMPTY_BOOKING_FILTERS };
+              t.start = 1;
+              reloadBookingTab(b.tab);
+              return;
+            }
+            render();
+          },
         }, b.filterOpen ? '收起篩選器' : '篩選器'),
         el('button', {
           class: 'btn btn--ghost btn--small',
