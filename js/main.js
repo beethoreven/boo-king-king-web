@@ -68,7 +68,7 @@ function renderTopbar() {
   }
 
   return el('div', { class: 'topbar' }, [
-    el('div', { class: 'topbar__brand' }, [brandIcon(), 'Booking King']),
+    el('div', { class: 'topbar__brand' }, [brandIcon(), '步經徑']),
     el('div', { class: 'topbar__actions' }, actions),
   ]);
 }
