@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
-import { confirmDespiteConflict } from './conflicts.js';
+import { hostMayConfirm } from './conflicts.js';
 
 const TABS = [
   { key: 'pending', label: '待確認場次' },
@@ -138,14 +138,8 @@ export function createHostView() {
     if (!ok) return;
 
     // 撞期檢查排在同意之後、送出之前，讓「依然確認」按下去就是真的送出，
-    // 中間不再多問一次。onlyMine：這裡在意的是「我自己被排了兩場」，
-    // 別的主持人撞到什麼是管理員的事。
-    const proceed = await confirmDespiteConflict(item.id, {
-      tail: '請通知管理員處理',
-      confirmText: '依然確認',
-      onlyMine: true,
-    });
-    if (!proceed) return;
+    // 中間不再多問一次。自己撞期會直接擋下來（見 conflicts.js）。
+    if (!await hostMayConfirm(item.id)) return;
 
     try {
       await api.post(`/api/bookings/${item.id}/confirm`);

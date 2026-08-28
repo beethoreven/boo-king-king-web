@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog } from './ui.js';
-import { confirmDespiteConflict } from './conflicts.js';
+import { adminMaySwitch } from './conflicts.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -453,15 +453,9 @@ export function createAdminView() {
             onChange: async (v) => {
               if (v === (item.status ?? b.tab)) return;
               if (v !== 'cancelled') {
-                // 撞期先問。那是既成事實（別的場次已經佔住這位主持人），
-                // 比「還沒有人確認」嚴重——先講嚴重的那件。
-                // 不限 onlyMine：管理員要看的是這場有沒有問題，不是
-                // 他自己有沒有被排到。
-                const proceed = await confirmDespiteConflict(item.id, {
-                  tail: '請確保沒有衝突場次狀況發生',
-                  confirmText: '依然切換',
-                });
-                if (!proceed) { render(); return; }
+                // 劇本撞期先問。那是既成事實（這個劇本同時段已經開了另一
+                // 場），比「還沒有人確認」嚴重——先講嚴重的那件。
+                if (!await adminMaySwitch(item.id)) { render(); return; }
 
                 const outstanding = unconfirmedRoles(item, mmg);
                 if (outstanding.length) {
