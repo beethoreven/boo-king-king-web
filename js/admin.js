@@ -214,7 +214,14 @@ export function createAdminView() {
           type: 'text',
           value: slot.name ?? '',
           placeholder: '留空＝這齣戲沒有這個角色',
-          onInput: (e) => {
+          // 打字時只寫值，不重繪。render() 會把整個畫面重建，正在編輯的
+          // 這個欄位也會被換成新節點——焦點跟著消失，打一個字就跳走。
+          // 注音更嚴重：組字中的狀態在元素被銷毀後無法還原，等於完全
+          // 打不了中文。
+          onInput: (e) => { slot.name = e.target.value; },
+          // 依附這個值的 UI（下面的主持人標籤、新增下拉、提示文字）改在
+          // 離開欄位時才更新。change 不會在組字途中觸發，所以不會打斷輸入。
+          onChange: (e) => {
             slot.name = e.target.value;
             if (!e.target.value.trim()) slot.user_ids = [];
             render();
@@ -273,13 +280,14 @@ export function createAdminView() {
     const u = s.editing;
     const original = s.items.find((x) => x.id === u.id);
     const setField = (k) => (e) => { u[k] = e.target.value; };
-    const emailChanged = u.email !== original.email;
 
     return el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, `編輯使用者 #${u.id}`),
       field({
         label: 'Email（Google 登入帳號）',
-        control: el('input', { type: 'email', value: u.email ?? '', onInput: (e) => { u.email = e.target.value; render(); } }),
+        // 不重繪：這裡不需要。警語是常駐的，而「email 有沒有被改過」
+        // 改成在按下儲存的當下才算（見下方），不必為了更新它而重建畫面。
+        control: el('input', { type: 'email', value: u.email ?? '', onInput: setField('email') }),
         // 常駐紅字，不是只有改了才出現——這是不可逆的破壞性操作，
         // 使用者應該在動手之前就看到警告。
         warn: '改動後該帳號將無法用原本的 Google 帳號登入，且對方無法自行修復',
@@ -306,6 +314,10 @@ export function createAdminView() {
           onClick: async () => {
             // 改 email 要二次確認：常駐警語容易被略過，而這個操作
             // 改錯了對方就登不進來、自己也救不了。
+            //
+            // 在這裡才比對，不在 render 時算：算在 render 就得靠每次
+            // 輸入都重繪才會更新，而那正是會把使用者踢出輸入框的原因。
+            const emailChanged = u.email !== original.email;
             if (emailChanged) {
               const ok = await confirmDialog({
                 title: '確認變更登入 Email',
@@ -411,7 +423,10 @@ export function createAdminView() {
           label: '訂金',
           control: el('input', {
             type: 'number', value: item.deposit ?? 0,
-            onInput: (e) => { item.deposit = Number(e.target.value || 0); render(); },
+            // 同樣不在打字途中重繪。下面的 warn（訂金與應收金額的關係）
+            // 依附這個值，改成離開欄位時才更新。
+            onInput: (e) => { item.deposit = Number(e.target.value || 0); },
+            onChange: () => render(),
           }),
           warn: depositWarning(item.deposit, item.booking_cost),
         }),
