@@ -574,3 +574,12 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   font-size: 14px;
   color: var(--ink-faint);
 }
+
+/* 清單上方的即時搜尋框。跟「新增」按鈕同一列，所以要能自己撐開剩餘寬度。 */
+.toolbar .search-inline {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 400;
+}

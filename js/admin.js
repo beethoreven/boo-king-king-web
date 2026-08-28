@@ -69,8 +69,8 @@ export function createAdminView() {
 
   const state = {
     section: 'mmg',
-    mmg: { items: [], hostCandidates: [], loading: true, editing: null },
-    users: { items: [], loading: true, editing: null },
+    mmg: { items: [], hostCandidates: [], loading: true, editing: null, search: '' },
+    users: { items: [], loading: true, editing: null, search: '' },
     bookings: {
       tabs: {},           // 後端給的 {key: 中文標籤}
       tabOrder: [],
@@ -159,10 +159,32 @@ export function createAdminView() {
   }
 
   /** 清單上方的「新增」列。三個頁籤共用。 */
-  function addBar(label, onClick) {
+  function addBar(label, onClick, extra = null) {
     return el('div', { class: 'section toolbar' }, [
       el('button', { class: 'btn btn--ghost btn--small', onClick }, label),
-    ]);
+      extra,
+    ].filter(Boolean));
+  }
+
+  /**
+   * 清單的即時搜尋框。
+   *
+   * 場次那邊的篩選要按「篩選」才生效，是因為每次篩選都要打一支 API；
+   * 劇本與使用者是整包載進來的，在前端篩沒有任何成本，所以打字就篩。
+   *
+   * ★ 打字時刻意不呼叫 render()：那會 clear(root) 把這個輸入框卸下來，
+   *   焦點跟著消失、注音更是打不完一個字。改成直接換掉清單節點的內容，
+   *   輸入框自己完全不動。
+   */
+  function searchBox(section, placeholder, listNode, refill) {
+    return el('input', {
+      type: 'text',
+      class: 'search-inline',
+      placeholder,
+      value: section.search,
+      'aria-label': placeholder,
+      onInput: (e) => { section.search = e.target.value; refill(listNode); },
+    });
   }
 
   // ── 劇本管理 ────────────────────────────────────────────
@@ -170,24 +192,40 @@ export function createAdminView() {
   function renderMmgList() {
     const s = state.mmg;
     if (s.loading) return spinner();
+
+    const listNode = el('div', { class: 'list' });
+    const fill = (node) => {
+      clear(node);
+      const term = s.search.trim().toLowerCase();
+      const hits = term ? s.items.filter((m) => m.name.toLowerCase().includes(term)) : s.items;
+      if (!hits.length) {
+        node.append(el('div', { class: 'empty' }, term ? '沒有符合的劇本' : '目前沒有劇本'));
+        return;
+      }
+      for (const m of hits) node.append(mmgRow(m));
+    };
+    fill(listNode);
+
     return el('div', {}, [
-      addBar('＋ 新增劇本', () => { s.editing = emptyMmg(); render(); }),
-      el('div', { class: 'section' }, [
-      el('div', { class: 'list' }, s.items.map((m) =>
-        el('div', { class: 'card list-item' }, [
-          el('div', { class: 'list-item__main' }, [
-            el('div', { class: 'list-item__title' }, m.name),
-            el('div', { class: 'list-item__meta' },
-              `${m.period ?? '—'} 小時 · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
-            el('div', { class: 'list-item__meta' },
-              m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
-          ]),
-          el('div', { class: 'list-item__side' }, [
-            m.status !== 'active' && el('div', { class: 'status-chip' }, '下架'),
-            el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(m); render(); } }, '編輯'),
-          ]),
-        ]),
-      )),
+      addBar('＋ 新增劇本', () => { s.editing = emptyMmg(); render(); },
+        searchBox(s, '搜尋劇本名稱', listNode, fill)),
+      el('div', { class: 'section' }, [listNode]),
+    ]);
+  }
+
+  function mmgRow(m) {
+    const s = state.mmg;
+    return el('div', { class: 'card list-item' }, [
+      el('div', { class: 'list-item__main' }, [
+        el('div', { class: 'list-item__title' }, m.name),
+        el('div', { class: 'list-item__meta' },
+          `${m.period ?? '—'} 小時 · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
+        el('div', { class: 'list-item__meta' },
+          m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
+      ]),
+      el('div', { class: 'list-item__side' }, [
+        m.status !== 'active' && el('div', { class: 'status-chip' }, '下架'),
+        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(m); render(); } }, '編輯'),
       ]),
     ]);
   }
@@ -292,23 +330,42 @@ export function createAdminView() {
   function renderUsersList() {
     const s = state.users;
     if (s.loading) return spinner();
+
+    const listNode = el('div', { class: 'list' });
+    const fill = (node) => {
+      clear(node);
+      const term = s.search.trim().toLowerCase();
+      // 姓名或 email 任一命中都算。管理員找人時記得的可能是哪一個都有。
+      const hits = term
+        ? s.items.filter((u) => `${u.name ?? ''} ${u.email}`.toLowerCase().includes(term))
+        : s.items;
+      if (!hits.length) {
+        node.append(el('div', { class: 'empty' }, term ? '沒有符合的使用者' : '目前沒有使用者'));
+        return;
+      }
+      for (const u of hits) node.append(userRow(u));
+    };
+    fill(listNode);
+
     return el('div', {}, [
-      addBar('＋ 新增使用者', () => { s.editing = emptyUser(); render(); }),
-      el('div', { class: 'section' }, [
-      el('div', { class: 'list' }, s.items.map((u) =>
-        el('div', { class: 'card list-item' }, [
-          el('div', { class: 'list-item__main' }, [
-            el('div', { class: 'list-item__title' }, u.name || '（未命名）'),
-            el('div', { class: 'list-item__meta' }, u.email),
-            el('div', { class: 'list-item__meta' },
-              [u.role_label, u.line_id && `LINE ${u.line_id}`, u.phone].filter(Boolean).join(' · ')),
-          ]),
-          el('div', { class: 'list-item__side' }, [
-            u.status !== 'active' && el('div', { class: 'status-chip' }, '停用'),
-            el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(u); render(); } }, '編輯'),
-          ]),
-        ]),
-      )),
+      addBar('＋ 新增使用者', () => { s.editing = emptyUser(); render(); },
+        searchBox(s, '搜尋姓名或 Email', listNode, fill)),
+      el('div', { class: 'section' }, [listNode]),
+    ]);
+  }
+
+  function userRow(u) {
+    const s = state.users;
+    return el('div', { class: 'card list-item' }, [
+      el('div', { class: 'list-item__main' }, [
+        el('div', { class: 'list-item__title' }, u.name || '（未命名）'),
+        el('div', { class: 'list-item__meta' }, u.email),
+        el('div', { class: 'list-item__meta' },
+          [u.role_label, u.line_id && `LINE ${u.line_id}`, u.phone].filter(Boolean).join(' · ')),
+      ]),
+      el('div', { class: 'list-item__side' }, [
+        u.status !== 'active' && el('div', { class: 'status-chip' }, '停用'),
+        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(u); render(); } }, '編輯'),
       ]),
     ]);
   }
