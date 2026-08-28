@@ -498,6 +498,11 @@ export function createBookingView() {
     if (state.h === '' || state.mi === '') problems.push('時間尚未填寫完整');
     else if (!currentTime()) problems.push(`時間不正確：${state.h}:${state.mi}`);
 
+    // 已經知道撞期就不必送出去問。原本是照送、由後端擋下來，使用者要多按
+    // 一次「確認預約」、多等一趟往返，才看到一件螢幕上早就寫著的事。
+    if (state.slot?.has_conflict) problems.push('本時段有衝突場次，請改選其他時間');
+    if (state.slot?.is_full) problems.push('本時段已額滿');
+
     for (const gm of state.detail?.gm_slots ?? []) {
       if (state.hosts[gm.slot - 1] === null) {
         problems.push(`「${gm.name}」尚未選擇主持人`);
