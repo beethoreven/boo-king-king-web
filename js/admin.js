@@ -39,6 +39,9 @@ const USER_STATUS_OPTIONS = [
 ];
 
 const MMG_STATUS_OPTIONS = [
+  // 尚未上架的劇本玩家連清單都看不到。上架時刻一到會自動轉成上架，
+  // 下架時刻一到會自動轉成下架——不需要手動回來改。
+  { value: 'preparing', label: '尚未上架' },
   { value: 'active', label: '上架' },
   { value: 'inactive', label: '下架' },
 ];
@@ -57,8 +60,8 @@ const emptyMmg = () => ({
   id: null, name: '', period: null, price: null, booking_cost: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
-  // 新劇本預設今天上架。DATE 的語意就是從那天 00:00 起算。
-  start_booking: todayISO(), end_booking: null,
+  // 新劇本預設此刻上架。上架是一個明確的時刻，不只是日期。
+  start_booking: nowISO(), end_booking: null,
   schedule: { weekly: [], exceptions: [] },
   gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
 });
@@ -66,11 +69,13 @@ const emptyMmg = () => ({
 // 0=週日，跟後端 mmg_weekly_slot.weekday 與 JS 的 Date.getDay() 一致。
 const WEEKDAY_LABEL = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
-/** 今天（本機時區，實務上就是台北）的 YYYY-MM-DD。 */
-function todayISO() {
+/** 現在（本機時區，實務上就是台北），datetime-local 吃的格式。
+ *  不含秒——秒對「幾點上架」沒有意義，顯示出來只會讓人讀不出用意。 */
+function nowISO() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+       + `T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 const emptyUser = () => ({
@@ -345,13 +350,26 @@ export function createAdminView() {
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
-          disabled: !m.start_booking,
-          // 存檔前把排期的工作副本轉回要送出去的形狀。
-          onClick: () => save(
-            m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
-            (saved) => { upsert(s.items, saved); s.editing = null; render(); },
-            { create: !m.id },
-          ),
+          disabled: !m.start_booking || Boolean(listingOrderError(m)),
+          // 格式不對就不送。紅字是提示，這裡才是真的擋下來——只有紅字的話
+          // 使用者照樣按得下去，然後收到一句後端的錯誤，還要自己回頭找是
+          // 哪一列。
+          onClick: async () => {
+            const errors = scheduleErrors(m);
+            if (errors.length) {
+              await alertDialog({
+                title: '開放時段格式不正確',
+                body: `請修正以下欄位再儲存：\n\n${errors.join('\n')}`,
+              });
+              return;
+            }
+            // 存檔前把排期的工作副本轉回要送出去的形狀。
+            save(
+              m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
+              (saved) => { upsert(s.items, saved); s.editing = null; render(); },
+              { create: !m.id },
+            );
+          },
         }, m.id ? '儲存' : '新增'),
       ]),
     ]);
@@ -375,21 +393,65 @@ export function createAdminView() {
     m._sched = {
       days: WEEKDAY_LABEL.map((_label, wd) => {
         const hit = weekly.find((w) => w.weekday === wd);
-        return { on: Boolean(hit), text: (hit?.times ?? []).join('、') };
+        return { on: Boolean(hit), text: (hit?.times ?? []).join(', ') };
       }),
       exceptions: (m.schedule?.exceptions ?? []).map((e) => ({
-        date: e.date, is_open: e.is_open, text: (e.times ?? []).join('、'),
+        date: e.date, is_open: e.is_open, text: (e.times ?? []).join(', '),
       })),
     };
     return m;
   }
 
-  /** 工作副本轉回要送出去的形狀。全形逗號、頓號、空白都當分隔。 */
+  /**
+   * 解析時段字串。回傳 { times, error }，error 非空就是格式不對。
+   *
+   * 接受：半形逗號分隔，逗號前後可以有空白——「10:00, 14:00」是標準的
+   * 英文寫法，把它判成錯誤只會讓人莫名其妙。
+   * 不接受：頓號、全形逗號、以及任何不是 HH:MM 的東西。錯誤訊息會指出
+   * 是哪一種，不要只說「格式錯誤」讓人自己猜。
+   */
+  function parseTimes(text) {
+    const raw = (text ?? '').trim();
+    if (!raw) return { times: [], error: '請至少填一個時段' };
+    if (/[、，]/.test(raw)) return { times: [], error: '請用半形逗號分隔，例如 10:00,14:00' };
+
+    const times = [];
+    for (const part of raw.split(',')) {
+      const t = part.trim();
+      if (!t) return { times: [], error: '有多餘的逗號' };
+      const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+      if (!m) return { times: [], error: `「${t}」不是 HH:MM 格式` };
+      const h = Number(m[1]);
+      const mi = Number(m[2]);
+      if (h > 23 || mi > 59) return { times: [], error: `「${t}」超出範圍` };
+      const value = `${String(h).padStart(2, '0')}:${m[2]}`;
+      if (!times.includes(value)) times.push(value);
+    }
+    return { times: times.sort(), error: '' };
+  }
+
+  /** 整份排期的格式錯誤，回傳一個陣列（空的代表全部合法）。 */
+  function scheduleErrors(m) {
+    const out = [];
+    m._sched.days.forEach((d, wd) => {
+      if (!d.on) return;
+      const { error } = parseTimes(d.text);
+      if (error) out.push(`${WEEKDAY_LABEL[wd]}：${error}`);
+    });
+    m._sched.exceptions.forEach((e) => {
+      if (!e.date) { out.push('特定日期有一列沒有填日期'); return; }
+      if (!e.is_open) return;
+      const { error } = parseTimes(e.text);
+      if (error) out.push(`${e.date}：${error}`);
+    });
+    return out;
+  }
+
+  /** 工作副本轉回要送出去的形狀。 */
   function closeSchedule(m) {
-    const split = (t) => t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
     m.schedule = {
       weekly: m._sched.days
-        .map((d, wd) => ({ weekday: wd, times: split(d.text) }))
+        .map((d, wd) => ({ weekday: wd, times: parseTimes(d.text).times }))
         // 沒勾的星期就是沒有那一列，不是留一列空的——「不開」的表達
         // 方式是不存在，見 db/schema.py 的 _ensure_schedule。
         .filter((d, wd) => m._sched.days[wd].on && d.times.length),
@@ -397,7 +459,7 @@ export function createAdminView() {
         .filter((e) => e.date)
         .map((e) => ({
           date: e.date, is_open: e.is_open,
-          times: e.is_open ? split(e.text) : [],
+          times: e.is_open ? parseTimes(e.text).times : [],
         })),
     };
     return m;
@@ -411,23 +473,26 @@ export function createAdminView() {
 
     return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:10px' }, [
       el('div', { class: 'row' }, [
-        field({ label: '上架日期（必填）',
-          control: el('input', { type: 'date', value: m.start_booking ?? '', required: true,
+        field({ label: '上架時間（必填）',
+          control: el('input', { type: 'datetime-local', value: m.start_booking ?? '', required: true,
             onChange: (e) => { m.start_booking = e.target.value || ''; render(); } }) }),
-        field({ label: '下架日期',
-          control: el('input', { type: 'date', value: m.end_booking ?? '',
+        field({ label: '下架時間',
+          control: el('input', { type: 'datetime-local', value: m.end_booking ?? '',
             onChange: (e) => { m.end_booking = e.target.value || null; render(); } }) }),
       ]),
       el('div', { class: 'field__hint' },
-        '下架日期留空＝不打算下架。這是絕對外框，區間外就算設了特例日也不會開放'),
-      // 上架日期是必填的。一齣連上架日都掛不出來的戲，代表它還沒真的要賣，
-      // 那它就不該出現在玩家訂得到的清單裡。
-      !m.start_booking && el('div', { class: 'field__error' }, '上架日期不能空白'),
+        '下架時間留空＝不打算下架。這是絕對外框，區間外就算設了特例日也不會開放'),
+      el('div', { class: 'field__hint' },
+        '狀態設為「尚未上架」時，一到上架時間會自動轉成上架；到下架時間會自動轉成下架'),
+      // 上架時間是必填的。一齣連上架時間都掛不出來的戲，代表它還沒真的
+      // 要賣，那它就不該出現在玩家訂得到的清單裡。
+      !m.start_booking && el('div', { class: 'field__error' }, '上架時間不能空白'),
+      listingOrderError(m) && el('div', { class: 'field__error' }, listingOrderError(m)),
 
       el('div', { class: 'section__label', style: 'margin-top:4px' }, '每週開放時段'),
       ...sc.days.map((d, wd) => renderWeekday(d, wd)),
       el('div', { class: 'field__hint' },
-        '時段用逗號分隔，例如「10:00、14:00、19:00」。平日與週末可以不一樣'),
+        '時段用半形逗號分隔，例如「10:00,14:00,19:00」。'),
 
       el('div', { class: 'section__label', style: 'margin-top:4px' }, '特定日期'),
       ...sc.exceptions.map((e, i) => renderException(m, e, i)),
@@ -451,16 +516,28 @@ export function createAdminView() {
     ].filter(Boolean));
   }
 
+  /** 下架早於上架時的錯誤字串，沒問題回空字串。 */
+  function listingOrderError(m) {
+    if (!m.start_booking || !m.end_booking) return '';
+    return m.end_booking <= m.start_booking ? '下架時間必須晚於上架時間' : '';
+  }
+
   function renderWeekday(d, wd) {
+    const errNode = el('div', { class: 'field__error', hidden: true });
+    const showError = () => {
+      const msg = d.on ? parseTimes(d.text).error : '';
+      errNode.textContent = msg;
+      errNode.hidden = !msg;
+    };
     const input = el('input', {
       type: 'text',
       value: d.text,
-      placeholder: '10:00、14:00',
+      placeholder: '10:00,14:00',
       disabled: !d.on,
       'aria-label': `${WEEKDAY_LABEL[wd]}的開放時段`,
       // 打字不重繪，理由同主持人角色名稱：重繪會把這個輸入框卸下來，
-      // 焦點跟注音組字都會消失。
-      onInput: (e) => { d.text = e.target.value; },
+      // 焦點跟注音組字都會消失。錯誤紅字直接改文字節點。
+      onInput: (e) => { d.text = e.target.value; showError(); },
     });
     const box = el('input', {
       type: 'checkbox',
@@ -472,6 +549,7 @@ export function createAdminView() {
         d.on = e.target.checked;
         input.disabled = !d.on;
         row.classList.toggle('is-off', !d.on);
+        showError();
       },
     });
     const row = el('div', {
@@ -482,19 +560,27 @@ export function createAdminView() {
         [box, WEEKDAY_LABEL[wd]]),
       input,
     ]);
-    return row;
+    // 一開啟就把既有內容驗一次，不要等使用者去動它才發現有問題。
+    showError();
+    return el('div', {}, [row, errNode]);
   }
 
   function renderException(m, e, i) {
+    const errNode = el('div', { class: 'field__error', hidden: true });
+    const showError = () => {
+      const msg = e.is_open ? parseTimes(e.text).error : '';
+      errNode.textContent = msg;
+      errNode.hidden = !msg;
+    };
     const input = el('input', {
       type: 'text',
       value: e.text,
-      placeholder: '10:00、14:00',
+      placeholder: '10:00,14:00',
       disabled: !e.is_open,
       'aria-label': '這一天的開放時段',
-      onInput: (ev) => { e.text = ev.target.value; },
+      onInput: (ev) => { e.text = ev.target.value; showError(); },
     });
-    return el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
+    const row = el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
       el('input', {
         type: 'date', value: e.date, 'aria-label': '特定日期',
         onChange: (ev) => { e.date = ev.target.value; },
@@ -502,7 +588,7 @@ export function createAdminView() {
       select({
         options: [{ value: 'closed', label: '不開放' }, { value: 'open', label: '開放' }],
         value: e.is_open ? 'open' : 'closed',
-        onChange: (v) => { e.is_open = v === 'open'; input.disabled = !e.is_open; },
+        onChange: (v) => { e.is_open = v === 'open'; input.disabled = !e.is_open; showError(); },
         ariaLabel: '這一天開不開放',
       }),
       input,
@@ -511,6 +597,8 @@ export function createAdminView() {
         onClick: () => { m._sched.exceptions.splice(i, 1); render(); },
       }, '移除'),
     ]);
+    showError();
+    return el('div', {}, [row, errNode]);
   }
 
   /** 一個主持人角色：名稱 + 已加入的人（標籤，可移除）+ 新增下拉。 */
