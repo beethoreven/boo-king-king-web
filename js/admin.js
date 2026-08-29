@@ -14,7 +14,15 @@ const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
   { key: 'bookings', label: '場次管理' },
   { key: 'users', label: '使用者管理' },
+  { key: 'abuse', label: '異常紀錄' },
 ];
+
+// abuse_log.kind 的中文。後端存英文常數（那是程式在比對的東西），
+// 顯示的字放前端——改文案不該動到判斷邏輯。
+const ABUSE_KIND_LABEL = {
+  bad_request: '不合理的參數',
+  rate_limit: '請求過於頻繁',
+};
 
 const ROLE_OPTIONS = [
   { value: 1, label: '管理員' },
@@ -75,6 +83,7 @@ export function createAdminView() {
     section: 'mmg',
     mmg: { items: [], hostCandidates: [], rooms: [], loading: true, editing: null, search: '' },
     users: { items: [], loading: true, editing: null, search: '' },
+    abuse: { items: [], has_more: false, start: 1, loading: true, meta: {} },
     bookings: {
       tabs: {},           // 後端給的 {key: 中文標籤}
       tabOrder: [],
@@ -109,6 +118,20 @@ export function createAdminView() {
       state.users.items = d.items;
     } catch (err) { toast(err.message, { error: true }); }
     state.users.loading = false;
+    render();
+  }
+
+  async function loadAbuse() {
+    const s = state.abuse;
+    s.loading = true;
+    render();
+    try {
+      const d = await api.get('/api/admin/abuse', { start: s.start });
+      s.items = d.items;
+      s.has_more = d.has_more;
+      s.meta = { auto: d.auto_deactivate, limit: d.rate_limit_per_minute };
+    } catch (err) { toast(err.message, { error: true }); }
+    s.loading = false;
     render();
   }
 
@@ -147,6 +170,7 @@ export function createAdminView() {
     state.section = key;
     if (key === 'mmg') loadMmg();
     else if (key === 'users') loadUsers();
+    else if (key === 'abuse') loadAbuse();
     else loadBookings();
   }
 
@@ -758,6 +782,102 @@ export function createAdminView() {
 
   // ── 主渲染 ──────────────────────────────────────────────
 
+  // ── 異常紀錄 ────────────────────────────────────────────
+  //
+  // 這一頁是給人讀的線索，不是稽核軌跡：可以整批刪，也可以只刪一個人的。
+  // 處理完一次誤判之後，留著只會讓下次查詢多一堆雜訊。
+
+  async function clearAbuse(userId, who) {
+    const ok = await confirmDialog({
+      title: '清除異常紀錄',
+      body: userId
+        ? `確定要清除「${who}」的所有異常紀錄嗎？清除後就查不回來了。`
+        : '確定要清除全部使用者的異常紀錄嗎？清除後就查不回來了。',
+      confirmText: '清除',
+      cancelText: '取消',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await api.del('/api/admin/abuse', { user_id: userId });
+      toast(`已清除 ${r.removed} 筆`);
+      state.abuse.start = 1;
+      loadAbuse();
+    } catch (err) {
+      await alertDialog({ title: '清除失敗', body: err.message });
+    }
+  }
+
+  function renderAbuseList() {
+    const s = state.abuse;
+    if (s.loading) return spinner();
+
+    const header = el('div', { class: 'section toolbar' }, [
+      el('button', {
+        class: 'btn btn--ghost btn--small',
+        disabled: !s.items.length,
+        onClick: () => clearAbuse(null),
+      }, '清除全部紀錄'),
+      // 把目前的模式寫在畫面上。停權與否是一個常數決定的，去翻程式碼才
+      // 知道現在是哪一種，等於這一頁看到的數字沒辦法解讀。
+      el('div', { class: 'field__hint' },
+        `每分鐘上限 ${s.meta.limit ?? '—'} 次${s.meta.auto ? '；超標會自動停權' : '；目前只記錄，不會自動停權'}`),
+    ]);
+
+    if (!s.items.length) {
+      return el('div', {}, [header, el('div', { class: 'empty' }, '目前沒有異常紀錄')]);
+    }
+
+    return el('div', {}, [
+      header,
+      el('div', { class: 'section' },
+        el('div', { class: 'list' }, s.items.map(abuseRow))),
+      renderAbusePager(),
+    ].filter(Boolean));
+  }
+
+  function abuseRow(a) {
+    const who = a.name || a.email;
+    return el('div', { class: 'card list-item' }, [
+      el('div', { class: 'list-item__main' }, [
+        el('div', { class: 'list-item__title' },
+          `${who}／${ABUSE_KIND_LABEL[a.kind] ?? a.kind}`),
+        el('div', { class: 'list-item__meta' }, a.email),
+        el('div', { class: 'list-item__meta' }, `${a.path ?? '—'}　${a.detail ?? ''}`),
+        // 起訖都給：只看最後一次，分不出「五分鐘內連打 200 次」跟
+        // 「一整天零星錯 200 次」——前者是攻擊，後者比較像前端有 bug。
+        el('div', { class: 'list-item__meta' },
+          `${fmtTime(a.first_at)} → ${fmtTime(a.last_at)}`),
+      ]),
+      el('div', { class: 'list-item__side' }, [
+        el('div', { class: 'status-chip' }, `${a.hits} 次`),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          onClick: () => clearAbuse(a.user_id, who),
+        }, '清除此人'),
+      ]),
+    ]);
+  }
+
+  function renderAbusePager() {
+    const s = state.abuse;
+    const atFirst = s.start <= 1;
+    if (atFirst && !s.has_more) return null;
+    return el('div', { class: 'section' }, el('div', { class: 'pager' }, [
+      el('button', {
+        class: 'btn btn--ghost btn--small',
+        disabled: atFirst,
+        onClick: () => { s.start = Math.max(1, s.start - 50); loadAbuse(); },
+      }, '← 上一頁'),
+      el('div', { class: 'pager__label' }, `${s.start} – ${s.start + s.items.length - 1}`),
+      el('button', {
+        class: 'btn btn--ghost btn--small',
+        disabled: !s.has_more,
+        onClick: () => { s.start += 50; loadAbuse(); },
+      }, '下一頁 →'),
+    ]));
+  }
+
   /**
    * 手動跑一次場次整理。
    *
@@ -815,6 +935,8 @@ export function createAdminView() {
       root.append(state.mmg.editing ? renderMmgEditor() : renderMmgList());
     } else if (state.section === 'users') {
       root.append(state.users.editing ? renderUserEditor() : renderUsersList());
+    } else if (state.section === 'abuse') {
+      root.append(renderAbuseList());
     } else {
       root.append(state.bookings.editing ? renderBookingEditor() : renderBookingsList());
     }
@@ -823,6 +945,13 @@ export function createAdminView() {
   // 場次編輯要用到劇本的角色定義，所以一開始就把劇本也載進來
   loadMmg();
   return root;
+}
+
+/** ISO 時間 → 本地的「月/日 時:分」。年份省掉，這一頁看的都是近期的事。 */
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function deepCopy(o) {

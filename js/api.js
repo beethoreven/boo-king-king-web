@@ -139,4 +139,7 @@ export const api = {
   post: (path, body) => request('POST', path, { body }),
   put: (path, body) => request('PUT', path, { body }),
   patch: (path, body) => request('PATCH', path, { body }),
+  // DELETE 用查詢字串帶參數而不是 body：帶 body 的 DELETE 在各層
+  // proxy 的處理不一致，有些會直接丟掉。
+  del: (path, query) => request('DELETE', path, { query }),
 };
