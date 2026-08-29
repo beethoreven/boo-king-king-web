@@ -21,6 +21,7 @@
  */
 
 import { api, ApiError } from './api.js';
+import { createCalendar } from './calendar.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner } from './ui.js';
 import { getUser } from './auth.js';
 
@@ -80,13 +81,13 @@ export function createBookingView() {
   //   就算它行為古怪也只是往下排寫一次值，不影響任何事。而下排是普通的
   //   數字輸入，沒有「區段」的概念，結構上不可能打到一半跳掉。
   //   這也是 fireless-war 那個介面好用的原因：picker 只是捷徑，不是必經之路。
-  const datePicker = el('input', {
-    type: 'date',
-    class: 'date-picker',
-    'aria-label': '用日曆選擇日期',
-    onChange: () => {
-      if (!datePicker.value) return;
-      const [y, mo, d] = datePicker.value.split('-');
+  // ★ 自刻的日曆，不是 <input type="date">。原生控制項只吃 min/max，
+  //   沒辦法把區間內個別沒開放的日子變成不可選，而那正是這裡最需要
+  //   表達的形狀。詳見 js/calendar.js。
+  const calendar = createCalendar({
+    loadMonth: loadMonthDays,
+    onPick: (iso) => {
+      const [y, mo, d] = iso.split('-');
       fieldYear.value = Number(y);
       fieldMonth.value = Number(mo);
       fieldDay.value = Number(d);
@@ -95,6 +96,7 @@ export function createBookingView() {
       refreshSlot();
     },
   });
+  const datePicker = calendar.node;
   const hourPicker = buildPicker('用下拉選擇小時', HOUR_OPTIONS, (v) => {
     fieldHour.value = Number(v);
     readManualFields();
@@ -400,7 +402,8 @@ export function createBookingView() {
     state.requestId = null;
     state.y = ''; state.mo = ''; state.d = ''; state.h = ''; state.mi = '';
     for (const f of [fieldYear, fieldMonth, fieldDay, fieldHour, fieldMinute]) f.value = '';
-    datePicker.value = '';
+    calendar.setValue('');
+    calendar.reset();
     hourPicker.value = '';
     minutePicker.value = '';
     state.hosts = [...EMPTY_HOSTS];
@@ -425,6 +428,7 @@ export function createBookingView() {
     resetBelowScript();
     state.detail = null;
     state.availability = null;
+    monthCache.clear();
     if (value) {
       try {
         // 兩支一起發，不要一支等完再發另一支——它們互不相依，串起來只是
@@ -480,37 +484,77 @@ export function createBookingView() {
     openTimeWrap.hidden = unavailable;
     freeTimeWrap.hidden = !unavailable;
     if (unavailable) {
-      datePicker.removeAttribute('min');
-      datePicker.removeAttribute('max');
       availHint.textContent = '';
       openTimeHint.textContent = '';
       return;
     }
 
-    const days = av.days ?? {};
-    const open = Object.keys(days).sort();
-    if (!open.length) {
-      datePicker.removeAttribute('min');
-      datePicker.removeAttribute('max');
-      availHint.textContent = av.configured
-        ? '這齣戲在這段期間沒有開放的日期，請洽店家'
-        : '這齣戲尚未設定開放時段，目前無法預約';
-      refreshOpenTimes();
-      return;
-    }
-    // 原生日曆只吃 min/max，沒辦法把區間內的個別日子反白。區間先夾住，
-    // 區間內選到沒開的日子時，下面的時段選單會是空的、並顯示提示。
-    datePicker.min = open[0];
-    datePicker.max = open[open.length - 1];
-    availHint.textContent = `開放預約的日期到 ${open[open.length - 1]} 為止，共 ${open.length} 天`;
+    // 日曆自己會把沒開放的日子變成不可點，不再需要 min/max 夾範圍
+    // （那本來就只是原生控制項做不到逐日反白時的替代品）。
+    const open = Object.keys(av.days ?? {}).sort();
+    availHint.textContent = open.length
+      ? `最近的開放日期是 ${open[0]}`
+      : (av.configured
+          ? '這齣戲在這段期間沒有開放的日期，請洽店家'
+          : '這齣戲尚未設定開放時段，目前無法預約');
     refreshOpenTimes();
   }
 
+  /**
+   * 日曆翻到某個月時，去拿那個月的開放日期。
+   *
+   * 每個月快取一份：翻來翻去是很自然的操作，每翻一次都打一支 API 等於
+   * 讓使用者的猶豫變成後端的負擔——而每一次往返都在讓 Neon 的 compute
+   * 保持清醒（見後端 db/idle_gap.py）。
+   *
+   * 快取的鍵含劇本 id，換劇本自然就換一份，不會拿到上一齣的開放日。
+   */
+  const monthCache = new Map();
+
+  async function loadMonthDays(year, month) {
+    if (!state.mmgId) return {};
+    const key = `${state.mmgId}|${year}-${month}`;
+    if (monthCache.has(key)) return monthCache.get(key);
+
+    const last = new Date(year, month, 0).getDate();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const d = await api.get(`/api/mmg/${state.mmgId}/availability`, {
+      from: `${year}-${p2(month)}-01`,
+      to: `${year}-${p2(month)}-${p2(last)}`,
+    });
+    monthCache.set(key, d.days ?? {});
+    return d.days ?? {};
+  }
+
   /** 把「這一天的開放時段」灌進時段下拉。 */
-  function refreshOpenTimes() {
+  // 「這一天有哪些時段」的世代序。下面那支是非同步的，日期連續改動時
+  // 先發的回應可能比後發的晚到，沒有守衛就會用舊日期的時段蓋掉新的。
+  let timesSeq = 0;
+
+  /**
+   * 把「這一天的開放時段」灌進時段下拉。
+   *
+   * ★ 資料來自 loadMonthDays（按月快取），不是換劇本時抓的那 92 天。
+   *   日曆可以往後翻到 92 天以外，那時 state.availability 裡沒有那一天，
+   *   會讓一個日曆上明明點得到的日子顯示「這一天未開放」——選得到卻
+   *   說沒開，那是最難查的一種不一致。
+   */
+  async function refreshOpenTimes() {
     if (openTimeWrap.hidden) return;
+    const seq = ++timesSeq;
     const key = currentDate();
-    const times = state.availability?.days?.[key] ?? [];
+
+    let times = [];
+    if (key) {
+      const [y, mo] = key.split('-').map(Number);
+      try {
+        times = (await loadMonthDays(y, mo))[key] ?? [];
+      } catch {
+        times = [];
+      }
+    }
+    if (seq !== timesSeq) return;   // 期間日期又改過，這份已經過期
+
     const previous = openTimePicker.value;
     clear(openTimePicker);
     openTimePicker.append(el('option', { value: '' }, times.length ? '請選擇時段' : '這一天未開放'));
@@ -752,7 +796,7 @@ export function createBookingView() {
     // 上排 picker 只是輔助，這裡把它對齊到下排目前的值，讓它看起來一致。
     // 下排（真正的來源）不在這裡寫回去——那是使用者正在打字的地方。
     const date = currentDate();
-    if (datePicker.value !== date) datePicker.value = date;
+    calendar.setValue(date);
     const hh = state.h === '' ? '' : pad(Number(state.h), 2);
     const mm = state.mi === '' ? '' : pad(Number(state.mi), 2);
     if (hourPicker.value !== hh) hourPicker.value = HOUR_OPTIONS.includes(hh) ? hh : '';

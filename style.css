@@ -645,3 +645,99 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 時間輸入有兩組（自由輸入／店家設定的時段），同時只出現一組。
    兩組共用同一個寬度，切換時整排不會跳動。 */
 .picker-time { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; }
+
+/* ── 自刻日曆 ───────────────────────────────────────────────
+   原生 <input type="date"> 只吃 min/max，沒辦法把區間內個別沒開放的
+   日子變成不可選。觸發欄位刻意做得跟原本那個輸入框一模一樣——換掉的是
+   行為，不是視覺。見 js/calendar.js。 */
+
+.cal-wrap { position: relative; flex: 1; min-width: 0; }
+
+.cal-trigger {
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  font-size: 16px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.cal-trigger.is-empty { color: var(--ink-faint); }
+
+.cal {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  /* 手機上不要溢出畫面：面板本身可以比觸發欄位寬，但不能超過視窗。 */
+  min-width: 280px;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+}
+
+.cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cal__title { font-size: 15px; font-weight: 700; }
+.cal__nav {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  /* 44px 觸控目標。失去系統選單已經是代價，不要順便變成難按。 */
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+.cal__nav:hover { border-color: var(--accent); }
+
+.cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+
+.cal__dow {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+  padding-bottom: 4px;
+}
+.cal__pad { height: 44px; }
+
+.cal__day {
+  height: 44px;
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.cal__day:hover:not(:disabled) { border-color: var(--accent); }
+.cal__day.is-selected { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+
+/* 沒開放的日子。淡掉而且真的按不下去——這是整個元件存在的理由。 */
+.cal__day:disabled { color: var(--ink-disabled); cursor: not-allowed; }
+
+.cal__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 13px;
+  padding: 16px 0;
+}
