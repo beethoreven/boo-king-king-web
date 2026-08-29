@@ -57,13 +57,21 @@ const emptyMmg = () => ({
   id: null, name: '', period: null, price: null, booking_cost: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
-  start_booking: null, end_booking: null,
+  // 新劇本預設今天上架。DATE 的語意就是從那天 00:00 起算。
+  start_booking: todayISO(), end_booking: null,
   schedule: { weekly: [], exceptions: [] },
   gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
 });
 
 // 0=週日，跟後端 mmg_weekly_slot.weekday 與 JS 的 Date.getDay() 一致。
 const WEEKDAY_LABEL = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+/** 今天（本機時區，實務上就是台北）的 YYYY-MM-DD。 */
+function todayISO() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 const emptyUser = () => ({
   id: null, email: '', name: '', role: 3, status: 'active', line_id: '', phone: '',
@@ -337,6 +345,7 @@ export function createAdminView() {
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
+          disabled: !m.start_booking,
           // 存檔前把排期的工作副本轉回要送出去的形狀。
           onClick: () => save(
             m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
@@ -402,15 +411,18 @@ export function createAdminView() {
 
     return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:10px' }, [
       el('div', { class: 'row' }, [
-        field({ label: '上架日期',
-          control: el('input', { type: 'date', value: m.start_booking ?? '',
-            onChange: (e) => { m.start_booking = e.target.value || null; render(); } }) }),
+        field({ label: '上架日期（必填）',
+          control: el('input', { type: 'date', value: m.start_booking ?? '', required: true,
+            onChange: (e) => { m.start_booking = e.target.value || ''; render(); } }) }),
         field({ label: '下架日期',
           control: el('input', { type: 'date', value: m.end_booking ?? '',
             onChange: (e) => { m.end_booking = e.target.value || null; render(); } }) }),
       ]),
       el('div', { class: 'field__hint' },
-        '留空＝那一側沒有限制。這是絕對外框，區間外就算設了特例日也不會開放'),
+        '下架日期留空＝不打算下架。這是絕對外框，區間外就算設了特例日也不會開放'),
+      // 上架日期是必填的。一齣連上架日都掛不出來的戲，代表它還沒真的要賣，
+      // 那它就不該出現在玩家訂得到的清單裡。
+      !m.start_booking && el('div', { class: 'field__error' }, '上架日期不能空白'),
 
       el('div', { class: 'section__label', style: 'margin-top:4px' }, '每週開放時段'),
       ...sc.days.map((d, wd) => renderWeekday(d, wd)),

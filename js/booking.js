@@ -470,25 +470,32 @@ export function createBookingView() {
   /** 依開放日期調整日曆的可選範圍與時段選單。 */
   function applyAvailability() {
     const av = state.availability;
-    const configured = Boolean(av?.configured);
-    const days = av?.days ?? {};
 
-    // 沒設定過的劇本維持原本的自由輸入。這個功能上線之前所有劇本都沒有
-    // 限制，突然全部鎖起來會讓既有的本一齣都訂不了。
-    openTimeWrap.hidden = !configured;
-    freeTimeWrap.hidden = configured;
-
-    if (!configured) {
+    // ★ 「拿不到開放時段」跟「店家沒有開放任何時段」是兩件事。
+    //   前者是這一層自己壞了（網路、後端），這時退回自由輸入讓玩家還是
+    //   訂得下去——後端仍然會擋，不會因此訂到沒開放的時間。
+    //   後者是店家的決定，那就該明講沒有開放，而不是給一組怎麼填都會被
+    //   退回的輸入框。把兩者混在一起，任何一邊都會被誤讀。
+    const unavailable = !av;
+    openTimeWrap.hidden = unavailable;
+    freeTimeWrap.hidden = !unavailable;
+    if (unavailable) {
       datePicker.removeAttribute('min');
       datePicker.removeAttribute('max');
       availHint.textContent = '';
+      openTimeHint.textContent = '';
       return;
     }
+
+    const days = av.days ?? {};
     const open = Object.keys(days).sort();
     if (!open.length) {
       datePicker.removeAttribute('min');
       datePicker.removeAttribute('max');
-      availHint.textContent = '這齣戲目前沒有開放的日期，請洽店家';
+      availHint.textContent = av.configured
+        ? '這齣戲在這段期間沒有開放的日期，請洽店家'
+        : '這齣戲尚未設定開放時段，目前無法預約';
+      refreshOpenTimes();
       return;
     }
     // 原生日曆只吃 min/max，沒辦法把區間內的個別日子反白。區間先夾住，
