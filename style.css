@@ -449,7 +449,6 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   gap: 6px;
 }
 
-.picker-row .date-picker { flex: 1; min-width: 0; }
 .picker-row .select-wrap { flex-shrink: 0; }
 
 .time-select {

@@ -41,6 +41,14 @@ export function createCalendar({ onPick, loadMonth }) {
   let days = {};                      // 這個月的開放資料
   let selected = '';
   let loading = false;
+  let failed = false;                 // 這一次載入是不是失敗了（≠ 沒開放）
+  // 翻月份的世代序。連續按「下個月」時會有兩個請求同時在飛，先發的可能
+  // 後到；沒有這個守衛，舊月份的資料會蓋掉新月份的。
+  //
+  // ★ 症狀不是「顯示錯的月份」那麼明顯：標題仍然是新月份，但格子是用
+  //   舊月份的日期當 key 去查的，一個都對不上，於是整個月變成全部不可
+  //   選——看起來就像店家那個月完全沒開。實測確認過。
+  let seq = 0;
 
   // 觸發用的欄位。外觀跟原本那個原生輸入框一致——案主要的是「沒開放
   // 不能點」，不是換一套視覺。
@@ -75,14 +83,21 @@ export function createCalendar({ onPick, loadMonth }) {
   }
 
   async function load() {
+    const mine = ++seq;
     loading = true;
+    failed = false;
     render();
     try {
-      days = await loadMonth(year, month) ?? {};
+      const got = await loadMonth(year, month) ?? {};
+      if (mine !== seq) return;   // 期間又翻過月份，這份已經過期
+      days = got;
     } catch {
-      // 拿不到就當作這個月沒有開放日。呼叫端已經在別處提示過失敗，
-      // 這裡再跳一次只是重複同一件事。
+      if (mine !== seq) return;
+      // ★ 「拿不到」跟「這個月沒開」要分開。兩者都是空的格子，但一個是
+      //   系統壞了、一個是店家的安排——混在一起的話，一次網路失敗會被
+      //   讀成「這家店整個月都不開」，而畫面上沒有任何地方說得出真相。
       days = {};
+      failed = true;
     }
     loading = false;
     render();
@@ -127,7 +142,8 @@ export function createCalendar({ onPick, loadMonth }) {
     }
 
     if (!Object.keys(days).length) {
-      grid.append(el('div', { class: 'cal__empty' }, '這個月沒有開放的日期'));
+      grid.append(el('div', { class: 'cal__empty' },
+        failed ? '讀取失敗，請稍後再試' : '這個月沒有開放的日期'));
     }
   }
 
