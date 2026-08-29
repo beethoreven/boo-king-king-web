@@ -30,13 +30,27 @@ const ROLE_OPTIONS = [
   { value: 3, label: '一般玩家' },
 ];
 
+// ★ 管理員只能在啟用／停用之間切換。「已刪除」不在這裡，因為後端的
+//   SELECTABLE_STATUSES 只收這兩個——刪除帳號是本人才做得到的動作，
+//   管理員代刪不被允許，這是刻意的設計。
+//
+//   但已刪除的帳號仍然要能被「改回來」：使用者看到的對話框寫著「只能
+//   聯繫管理員恢復」，那條路必須真的存在。做法是 statusOptionsFor()
+//   在對方目前就是 deleted 時，才把這個選項補上去當作可離開的起點。
+//   直接把它列成常駐選項的話，管理員會在一個正常帳號上選到它，然後
+//   收到一句「未知的狀態」——畫面提供了一個後端根本不接受的動作。
 const USER_STATUS_OPTIONS = [
   { value: 'active', label: '啟用' },
   { value: 'deactive', label: '停用' },
-  // 使用者自己刪掉帳號會變成這個。放進選單是為了讓管理員改得回來——
-  // 刪除的對話框寫著「只能聯繫管理員恢復」，那條路必須真的存在。
-  { value: 'deleted', label: '已刪除' },
 ];
+
+const DELETED_OPTION = { value: 'deleted', label: '已刪除（本人刪除）' };
+
+function statusOptionsFor(current) {
+  return current === 'deleted'
+    ? [DELETED_OPTION, ...USER_STATUS_OPTIONS]
+    : USER_STATUS_OPTIONS;
+}
 
 const MMG_STATUS_OPTIONS = [
   // 尚未上架的劇本玩家連清單都看不到。上架時刻一到會自動轉成上架，
@@ -580,25 +594,36 @@ export function createAdminView() {
       'aria-label': '這一天的開放時段',
       onInput: (ev) => { e.text = ev.target.value; showError(); },
     });
-    const row = el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
+    // ★ 兩行，不是一行。四個控制項擠一行時，「開放／不開放」那個下拉會
+    //   被壓到只剩一個箭頭——那一格正是這一列在講的事，看不見等於整列
+    //   讀不懂。時段字串又可能很長（10:00,14:00,19:00），更擠不下。
+    //   特例本來就不會有很多列，多一行換到看得懂，很划算。
+    const topRow = el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
       el('input', {
         type: 'date', value: e.date, 'aria-label': '特定日期',
         onChange: (ev) => { e.date = ev.target.value; },
       }),
-      select({
+      el('div', { class: 'select-wrap exc__mode' }, select({
         options: [{ value: 'closed', label: '不開放' }, { value: 'open', label: '開放' }],
         value: e.is_open ? 'open' : 'closed',
-        onChange: (v) => { e.is_open = v === 'open'; input.disabled = !e.is_open; showError(); },
+        onChange: (v) => {
+          e.is_open = v === 'open';
+          input.disabled = !e.is_open;
+          // 不開放的那一天沒有時段可言，把整行收起來而不是留一個
+          // 停用的輸入框佔位——留著會讓人以為那裡還需要填點什麼。
+          timeRow.hidden = !e.is_open;
+          showError();
+        },
         ariaLabel: '這一天開不開放',
-      }),
-      input,
+      })),
       el('button', {
-        class: 'btn btn--ghost btn--small',
+        class: 'btn btn--ghost btn--small exc__remove',
         onClick: () => { m._sched.exceptions.splice(i, 1); render(); },
       }, '移除'),
     ]);
+    const timeRow = el('div', { class: 'exc__times', hidden: !e.is_open }, input);
     showError();
-    return el('div', {}, [row, errNode]);
+    return el('div', { class: 'exc' }, [topRow, timeRow, errNode]);
   }
 
   /** 一個主持人角色：名稱 + 已加入的人（標籤，可移除）+ 新增下拉。 */
@@ -725,7 +750,7 @@ export function createAdminView() {
         }),
         field({
           label: '狀態',
-          control: select({ options: USER_STATUS_OPTIONS, value: u.status, onChange: (v) => { u.status = v; }, ariaLabel: '狀態' }),
+          control: select({ options: statusOptionsFor(original?.status ?? u.status), value: u.status, onChange: (v) => { u.status = v; }, ariaLabel: '狀態' }),
         }),
       ]),
       el('div', { class: 'row' }, [

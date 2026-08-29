@@ -741,3 +741,13 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   font-size: 13px;
   padding: 16px 0;
 }
+
+/* 特定日期：兩行。日期＋開放與否＋移除在上，時段在下。
+   四個擠一行時「開放／不開放」會被壓到只剩箭頭，而那一格正是這一列
+   在講的事（見 admin.js 的 renderException）。 */
+.exc { display: flex; flex-direction: column; gap: 6px; }
+.exc + .exc { margin-top: 10px; }
+.exc__mode { flex: 0 0 116px; }
+.exc__mode select { padding-right: 32px; }
+.exc__remove { flex: 0 0 auto; }
+.exc__times input { width: 100%; }
