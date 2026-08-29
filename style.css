@@ -637,3 +637,11 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
    量級，長得一樣會被順手按到。 */
 .btn--danger { background: var(--danger); color: #fff; }
 .btn--danger:disabled { background: #4a3330; color: var(--ink-disabled); cursor: not-allowed; }
+
+/* 沒勾選的星期整列淡掉。用 class 而不是重繪，切換時旁邊正在編輯的
+   時段輸入框才不會被卸下來（見 admin.js 的 renderWeekday）。 */
+.row.is-off { opacity: .45; }
+
+/* 時間輸入有兩組（自由輸入／店家設定的時段），同時只出現一組。
+   兩組共用同一個寬度，切換時整排不會跳動。 */
+.picker-time { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; }

@@ -91,6 +91,7 @@ export function createBookingView() {
       fieldMonth.value = Number(mo);
       fieldDay.value = Number(d);
       readManualFields();
+      refreshOpenTimes();
       refreshSlot();
     },
   });
@@ -113,6 +114,29 @@ export function createBookingView() {
 
   const timeHint = el('div', { class: 'field__hint' });
   const slotHint = el('div', { class: 'field__hint' });
+  const availHint = el('div', { class: 'field__hint' });
+  const openTimeHint = el('div', { class: 'field__hint' });
+
+  // 店家設定了開放時段時，時間就不是自由輸入而是從這裡挑——這正是
+  // 「時間也只有固定的時間可選」。沒設定的劇本走下面那組時／分下拉。
+  const openTimePicker = el('select', { 'aria-label': '選擇開放時段' });
+  openTimePicker.addEventListener('change', () => {
+    if (!openTimePicker.value) return;
+    const [h, mi] = openTimePicker.value.split(':');
+    fieldHour.value = Number(h);
+    fieldMinute.value = Number(mi);
+    readManualFields();
+    refreshSlot();
+  });
+
+  // 兩組時間輸入，同時只會出現一組（見 applyAvailability）。
+  const freeTimeWrap = el('div', { class: 'picker-time' }, [
+    el('div', { class: 'select-wrap' }, hourPicker),
+    el('span', { class: 'dt-unit' }, '時'),
+    el('div', { class: 'select-wrap' }, minutePicker),
+    el('span', { class: 'dt-unit' }, '分'),
+  ]);
+  const openTimeWrap = el('div', { class: 'select-wrap picker-time', hidden: true }, openTimePicker);
 
   const slotSection = el('div', { class: 'section' }, [
     el('div', { class: 'section__label' }, '場次'),
@@ -120,11 +144,11 @@ export function createBookingView() {
       el('div', { class: 'field__label' }, '選擇日期時間'),
       el('div', { class: 'picker-row' }, [
         datePicker,
-        el('div', { class: 'select-wrap' }, hourPicker),
-        el('span', { class: 'dt-unit' }, '時'),
-        el('div', { class: 'select-wrap' }, minutePicker),
-        el('span', { class: 'dt-unit' }, '分'),
+        freeTimeWrap,
+        openTimeWrap,
       ]),
+      availHint,
+      openTimeHint,
     ]),
     el('div', { class: 'field' }, [
       el('div', { class: 'field__label' }, '日期時間'),
@@ -260,7 +284,7 @@ export function createBookingView() {
       // 打字時只更新 state 與提示文字，不打 API、不碰任何輸入框的值。
       onInput: () => { readManualFields(); syncHints(); },
       // 離開欄位（或按 Enter）才算「這一格填完了」，這時才值得打 API。
-      onChange: () => { readManualFields(); refreshSlot(); },
+      onChange: () => { readManualFields(); refreshOpenTimes(); refreshSlot(); },
     });
   }
 
@@ -386,21 +410,109 @@ export function createBookingView() {
     state.slot = null;
   }
 
+  // 換劇本的世代序。兩支 API 都是非同步的，快速連續換劇本時，先發的
+  // 回應可能比後發的晚到——沒有這個守衛，舊劇本的開放時段會蓋掉新劇本
+  // 已經正確填好的那一份，畫面上完全看不出哪裡不對。
+  // 同一個理由下面的 refreshSlot 已經有 slotSeq 了。
+  let scriptSeq = 0;
+
   async function pickScript(value) {
+    const seq = ++scriptSeq;
     state.mmgId = value;
     // 兩個入口選出來的結果要一致：從下拉選的，搜尋欄也顯示同一個名字。
     const picked = state.scripts.find((s) => String(s.id) === String(value));
     searchInput.value = picked ? picked.name : '';
     resetBelowScript();
     state.detail = null;
+    state.availability = null;
     if (value) {
       try {
-        state.detail = await api.get(`/api/mmg/${value}`);
+        // 兩支一起發，不要一支等完再發另一支——它們互不相依，串起來只是
+        // 讓使用者多等一趟往返。
+        const [detail, avail] = await Promise.all([
+          api.get(`/api/mmg/${value}`),
+          loadAvailability(value),
+        ]);
+        if (seq !== scriptSeq) return;   // 期間又換過劇本，這份回應已經過期
+        state.detail = detail;
+        state.availability = avail;
       } catch (err) {
+        if (seq !== scriptSeq) return;
         toast(err.message, { error: true });
       }
     }
+    if (seq !== scriptSeq) return;
+    applyAvailability();
     render();
+  }
+
+  // ── 開放日期與時段 ──────────────────────────────────────────
+  //
+  // 判斷的唯一來源在後端（db/schedule.py）。這裡只是把結果拿來限制選單，
+  // 讓玩家選不到註定被退回的時間——它是體驗層，不是防線：真正擋人的是
+  // create_booking()，任何人繞過畫面直接打 API 一樣訂不成。
+
+  /** 今天起 92 天的開放日期。92 是後端一次查詢的上限。 */
+  async function loadAvailability(mmgId) {
+    const today = new Date();
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const to = new Date(today.getTime());
+    to.setDate(to.getDate() + 92);
+    try {
+      return await api.get(`/api/mmg/${mmgId}/availability`, { from: iso(today), to: iso(to) });
+    } catch {
+      // 拿不到就當作沒有限制，讓玩家還是訂得下去——後端仍然會擋。
+      // 這一層壞掉不該讓整個預約流程停擺。
+      return null;
+    }
+  }
+
+  /** 依開放日期調整日曆的可選範圍與時段選單。 */
+  function applyAvailability() {
+    const av = state.availability;
+    const configured = Boolean(av?.configured);
+    const days = av?.days ?? {};
+
+    // 沒設定過的劇本維持原本的自由輸入。這個功能上線之前所有劇本都沒有
+    // 限制，突然全部鎖起來會讓既有的本一齣都訂不了。
+    openTimeWrap.hidden = !configured;
+    freeTimeWrap.hidden = configured;
+
+    if (!configured) {
+      datePicker.removeAttribute('min');
+      datePicker.removeAttribute('max');
+      availHint.textContent = '';
+      return;
+    }
+    const open = Object.keys(days).sort();
+    if (!open.length) {
+      datePicker.removeAttribute('min');
+      datePicker.removeAttribute('max');
+      availHint.textContent = '這齣戲目前沒有開放的日期，請洽店家';
+      return;
+    }
+    // 原生日曆只吃 min/max，沒辦法把區間內的個別日子反白。區間先夾住，
+    // 區間內選到沒開的日子時，下面的時段選單會是空的、並顯示提示。
+    datePicker.min = open[0];
+    datePicker.max = open[open.length - 1];
+    availHint.textContent = `開放預約的日期到 ${open[open.length - 1]} 為止，共 ${open.length} 天`;
+    refreshOpenTimes();
+  }
+
+  /** 把「這一天的開放時段」灌進時段下拉。 */
+  function refreshOpenTimes() {
+    if (openTimeWrap.hidden) return;
+    const key = currentDate();
+    const times = state.availability?.days?.[key] ?? [];
+    const previous = openTimePicker.value;
+    clear(openTimePicker);
+    openTimePicker.append(el('option', { value: '' }, times.length ? '請選擇時段' : '這一天未開放'));
+    for (const t of times) openTimePicker.append(el('option', { value: t }, t));
+    openTimePicker.disabled = !times.length;
+    if (times.includes(previous)) openTimePicker.value = previous;
+    openTimeHint.textContent = !key
+      ? '請先選日期'
+      : (times.length ? '' : '這一天未開放，請改選其他日期');
   }
 
   // ── 主持人 ──────────────────────────────────────────────────
@@ -499,8 +611,9 @@ export function createBookingView() {
     if (state.h === '' || state.mi === '') problems.push('時間尚未填寫完整');
     else if (!currentTime()) problems.push(`時間不正確：${state.h}:${state.mi}`);
 
-    // 已經知道撞期就不必送出去問。原本是照送、由後端擋下來，使用者要多按
+    // 已經知道訂不成就不必送出去問。原本是照送、由後端擋下來，使用者要多按
     // 一次「確認預約」、多等一趟往返，才看到一件螢幕上早就寫著的事。
+    if (state.slot?.is_open === false) problems.push('此時間未開放');
     if (state.slot?.has_conflict) problems.push('本時段有衝突場次，請改選其他時間');
     if (state.slot?.is_full) problems.push('本時段已額滿');
 
@@ -677,7 +790,11 @@ function endTime(start, hours) {
  * 先後順序，誰都還沒定案。
  */
 function slotMessage(slot) {
-  // 撞期排在最前面：額滿還可以等別人取消，包廂被佔著是這個時間根本開不成。
+  // 沒開放排在最前面。這個時段根本不在店家開放的範圍內，講「已額滿」或
+  // 「有衝突」都是在描述一個不存在的場次——那兩句會讓人以為只要等一下
+  // 或改個主持人就有機會。
+  if (slot.is_open === false) return '此時間未開放';
+  // 撞期排在其次：額滿還可以等別人取消，包廂被佔著是這個時間根本開不成。
   // 兩者都成立時，先講那個改時間才能解決的。
   //
   // 刻意不寫是被什麼撞到。撞到的是別的客人的預約——演什麼、誰訂的、

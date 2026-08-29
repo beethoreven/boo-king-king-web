@@ -57,8 +57,13 @@ const emptyMmg = () => ({
   id: null, name: '', period: null, price: null, booking_cost: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
+  start_booking: null, end_booking: null,
+  schedule: { weekly: [], exceptions: [] },
   gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
 });
+
+// 0=週日，跟後端 mmg_weekly_slot.weekday 與 JS 的 Date.getDay() 一致。
+const WEEKDAY_LABEL = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
 const emptyUser = () => ({
   id: null, email: '', name: '', role: 3, status: 'active', line_id: '', phone: '',
@@ -254,7 +259,7 @@ export function createAdminView() {
     fill(listNode);
 
     return el('div', {}, [
-      addBar('＋ 新增劇本', () => { s.editing = emptyMmg(); render(); },
+      addBar('＋ 新增劇本', () => { s.editing = openSchedule(emptyMmg()); render(); },
         searchBox(s, '搜尋劇本名稱', listNode, fill)),
       el('div', { class: 'section' }, [listNode]),
     ]);
@@ -273,7 +278,7 @@ export function createAdminView() {
       ]),
       el('div', { class: 'list-item__side' }, [
         m.status !== 'active' && el('div', { class: 'status-chip' }, '下架'),
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(m); render(); } }, '編輯'),
+        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = openSchedule(deepCopy(m)); render(); } }, '編輯'),
       ]),
     ]);
   }
@@ -322,6 +327,9 @@ export function createAdminView() {
         hint: '場次衝突是看包廂有沒有被佔用，不是看同一齣戲被排兩場',
       }),
 
+      el('div', { class: 'section__label', style: 'margin-top:8px' }, '開放預約的日期與時段'),
+      renderSchedule(m),
+
       el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人角色'),
       ...m.gm_slots.map((slot, i) => renderGmSlot(m, slot, i)),
 
@@ -329,13 +337,167 @@ export function createAdminView() {
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
+          // 存檔前把排期的工作副本轉回要送出去的形狀。
           onClick: () => save(
-            m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', m,
+            m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
             (saved) => { upsert(s.items, saved); s.editing = null; render(); },
             { create: !m.id },
           ),
         }, m.id ? '儲存' : '新增'),
       ]),
+    ]);
+  }
+
+  // ── 排期設定 ────────────────────────────────────────────
+  //
+  // 四層，由高到低（跟後端 db/schedule.py 是同一套，那邊是唯一的判斷來源）：
+  //   0 上下架日期  絕對外框，區間外一律不開，特例也翻不過來
+  //   1 特定日期    「這一週跟平常不同」——臨時公休、臨時加場
+  //   2 每週常態    「每週都這樣」——平日／週末的差異放這裡
+  //   3 都沒設       ＝ 全關，只靠特例日一天一天開
+  //
+  // ★ 編輯期間用 m._sched 這份工作副本，存檔時才轉回 m.schedule。
+  //   理由是時段在畫面上是一個字串（「10:00, 14:00」），每打一個字就
+  //   parse 成陣列再塞回去，會讓「10:」這種還沒打完的中間狀態被吃掉。
+
+  /** 把後端來的 schedule 攤成畫面用的工作副本。 */
+  function openSchedule(m) {
+    const weekly = m.schedule?.weekly ?? [];
+    m._sched = {
+      days: WEEKDAY_LABEL.map((_label, wd) => {
+        const hit = weekly.find((w) => w.weekday === wd);
+        return { on: Boolean(hit), text: (hit?.times ?? []).join('、') };
+      }),
+      exceptions: (m.schedule?.exceptions ?? []).map((e) => ({
+        date: e.date, is_open: e.is_open, text: (e.times ?? []).join('、'),
+      })),
+    };
+    return m;
+  }
+
+  /** 工作副本轉回要送出去的形狀。全形逗號、頓號、空白都當分隔。 */
+  function closeSchedule(m) {
+    const split = (t) => t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
+    m.schedule = {
+      weekly: m._sched.days
+        .map((d, wd) => ({ weekday: wd, times: split(d.text) }))
+        // 沒勾的星期就是沒有那一列，不是留一列空的——「不開」的表達
+        // 方式是不存在，見 db/schema.py 的 _ensure_schedule。
+        .filter((d, wd) => m._sched.days[wd].on && d.times.length),
+      exceptions: m._sched.exceptions
+        .filter((e) => e.date)
+        .map((e) => ({
+          date: e.date, is_open: e.is_open,
+          times: e.is_open ? split(e.text) : [],
+        })),
+    };
+    return m;
+  }
+
+  function renderSchedule(m) {
+    const sc = m._sched;
+    const anyDay = sc.days.some((d) => d.on);
+    const configured = anyDay || sc.exceptions.length
+      || m.start_booking || m.end_booking;
+
+    return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:10px' }, [
+      el('div', { class: 'row' }, [
+        field({ label: '上架日期',
+          control: el('input', { type: 'date', value: m.start_booking ?? '',
+            onChange: (e) => { m.start_booking = e.target.value || null; render(); } }) }),
+        field({ label: '下架日期',
+          control: el('input', { type: 'date', value: m.end_booking ?? '',
+            onChange: (e) => { m.end_booking = e.target.value || null; render(); } }) }),
+      ]),
+      el('div', { class: 'field__hint' },
+        '留空＝那一側沒有限制。這是絕對外框，區間外就算設了特例日也不會開放'),
+
+      el('div', { class: 'section__label', style: 'margin-top:4px' }, '每週開放時段'),
+      ...sc.days.map((d, wd) => renderWeekday(d, wd)),
+      el('div', { class: 'field__hint' },
+        '時段用逗號分隔，例如「10:00、14:00、19:00」。平日與週末可以不一樣'),
+
+      el('div', { class: 'section__label', style: 'margin-top:4px' }, '特定日期'),
+      ...sc.exceptions.map((e, i) => renderException(m, e, i)),
+      el('button', {
+        class: 'btn btn--ghost btn--small',
+        style: 'align-self:flex-start',
+        onClick: () => {
+          sc.exceptions.push({ date: '', is_open: false, text: '' });
+          render();
+        },
+      }, '＋ 新增特定日期'),
+      el('div', { class: 'field__hint' },
+        '優先序高於每週設定，用來處理臨時公休或臨時加場'),
+
+      // 「還沒設定」跟「設定成全關」的結果看起來一樣，但意思完全不同，
+      // 所以要講出來——不然管理員會以為自己已經設好了。
+      !configured
+        ? el('div', { class: 'notice' }, '尚未設定任何排期，這齣戲目前不限制日期與時間')
+        : (!anyDay && el('div', { class: 'notice' },
+            '沒有勾選任何星期，代表常態全部關閉，只有下面列出的特定日期才開放')),
+    ].filter(Boolean));
+  }
+
+  function renderWeekday(d, wd) {
+    const input = el('input', {
+      type: 'text',
+      value: d.text,
+      placeholder: '10:00、14:00',
+      disabled: !d.on,
+      'aria-label': `${WEEKDAY_LABEL[wd]}的開放時段`,
+      // 打字不重繪，理由同主持人角色名稱：重繪會把這個輸入框卸下來，
+      // 焦點跟注音組字都會消失。
+      onInput: (e) => { d.text = e.target.value; },
+    });
+    const box = el('input', {
+      type: 'checkbox',
+      checked: d.on,
+      'aria-label': `${WEEKDAY_LABEL[wd]}是否開放`,
+      // 直接改這一列的節點，不呼叫 render()——旁邊可能有別的時段輸入框
+      // 正在被編輯，整頁重繪會把那一格的焦點也一起弄掉。
+      onChange: (e) => {
+        d.on = e.target.checked;
+        input.disabled = !d.on;
+        row.classList.toggle('is-off', !d.on);
+      },
+    });
+    const row = el('div', {
+      class: `row${d.on ? '' : ' is-off'}`,
+      style: 'align-items:center;gap:10px',
+    }, [
+      el('label', { style: 'display:flex;align-items:center;gap:6px;min-width:76px' },
+        [box, WEEKDAY_LABEL[wd]]),
+      input,
+    ]);
+    return row;
+  }
+
+  function renderException(m, e, i) {
+    const input = el('input', {
+      type: 'text',
+      value: e.text,
+      placeholder: '10:00、14:00',
+      disabled: !e.is_open,
+      'aria-label': '這一天的開放時段',
+      onInput: (ev) => { e.text = ev.target.value; },
+    });
+    return el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
+      el('input', {
+        type: 'date', value: e.date, 'aria-label': '特定日期',
+        onChange: (ev) => { e.date = ev.target.value; },
+      }),
+      select({
+        options: [{ value: 'closed', label: '不開放' }, { value: 'open', label: '開放' }],
+        value: e.is_open ? 'open' : 'closed',
+        onChange: (v) => { e.is_open = v === 'open'; input.disabled = !e.is_open; },
+        ariaLabel: '這一天開不開放',
+      }),
+      input,
+      el('button', {
+        class: 'btn btn--ghost btn--small',
+        onClick: () => { m._sched.exceptions.splice(i, 1); render(); },
+      }, '移除'),
     ]);
   }
 
