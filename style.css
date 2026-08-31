@@ -753,18 +753,25 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 
 /* ── Google 登入按鈕的白框 ─────────────────────────────────
    使用者已經登入 Google 時，GSI 會改用「個人化按鈕」（顯示頭像與信箱），
-   而那個變體是畫在一個跨來源的 iframe 裡的。那份文件的底色是白的，我們
-   的頁面是深色，加上按鈕本身是 pill 形狀蓋不滿矩形的 iframe，白色就從
-   四個角與邊緣露出來。
+   而那個變體是畫在一個跨來源的 iframe 裡。DevTools 量到的實際結構是：
 
-   iframe 裡面的樣式我們動不了（跨來源），但可以動 iframe 這個元素本身：
-   - background 透明，讓頁面底色透出來而不是白色
-   - color-scheme: dark 是關鍵——它告訴嵌入的文件用深色畫布，
-     否則瀏覽器會在 iframe 底下先鋪一層白。
+       iframe            width: 250px; height: 44px; margin: -2px -10px;
+         └─ #container-div  padding: 2px 10px;
 
-   ★ 這一段沒有在未登入的瀏覽器上驗證得出來（那時 GSI 用的是另一種
-     不含 iframe 的按鈕），需要在已登入 Google 的瀏覽器實際看。 */
+   按鈕只有 230×40，被那圈 padding 推在中間，而 iframe 內部文件的底色是
+   白的——白色就從上下各 2px、左右各 10px 的那一圈露出來。深色頁面上看
+   起來就是按鈕外面框了一個白色矩形。
+
+   ★ 先試過在 iframe 元素上設 background: transparent 與 color-scheme:
+     dark，部署後白框完全沒變——因為白色是 iframe **裡面那份文件**畫的，
+     而跨來源的內容改不到。那個做法在這裡是無效的。
+
+   有效的做法是把那一圈裁掉。inset 的數值正好對應上面的 padding，round
+   讓裁切也是藥丸形，否則圓角外側仍然會露出白色。iframe 本身的負 margin
+   已經把那一圈排除在版面之外，所以裁掉不會造成位移。
+
+   數值取自 Google 目前的實作，哪天他們改了，這裡會跟著失準——但失準的
+   後果只是白框回來，不會影響登入功能。 */
 iframe[src*="accounts.google.com"] {
-  background-color: transparent !important;
-  color-scheme: dark;
+  clip-path: inset(2px 10px round 999px);
 }
