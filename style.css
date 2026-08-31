@@ -750,3 +750,21 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 .exc__mode select { padding-right: 32px; }
 .exc__remove { flex: 0 0 auto; }
 .exc__times input { width: 100%; }
+
+/* ── Google 登入按鈕的白框 ─────────────────────────────────
+   使用者已經登入 Google 時，GSI 會改用「個人化按鈕」（顯示頭像與信箱），
+   而那個變體是畫在一個跨來源的 iframe 裡的。那份文件的底色是白的，我們
+   的頁面是深色，加上按鈕本身是 pill 形狀蓋不滿矩形的 iframe，白色就從
+   四個角與邊緣露出來。
+
+   iframe 裡面的樣式我們動不了（跨來源），但可以動 iframe 這個元素本身：
+   - background 透明，讓頁面底色透出來而不是白色
+   - color-scheme: dark 是關鍵——它告訴嵌入的文件用深色畫布，
+     否則瀏覽器會在 iframe 底下先鋪一層白。
+
+   ★ 這一段沒有在未登入的瀏覽器上驗證得出來（那時 GSI 用的是另一種
+     不含 iframe 的按鈕），需要在已登入 Google 的瀏覽器實際看。 */
+iframe[src*="accounts.google.com"] {
+  background-color: transparent !important;
+  color-scheme: dark;
+}
