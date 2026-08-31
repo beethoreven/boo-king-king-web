@@ -163,16 +163,38 @@ function renderApp() {
   app.append(view.build());
 }
 
+/** 在既有的登入畫面上顯示錯誤，不重畫、不動 Google 按鈕。 */
+function showLoginError(message) {
+  toast(message, { error: true });
+  const holder = app.querySelector('.section');
+  if (!holder) { renderLogin(message); return; }
+  let node = holder.querySelector('.field__error');
+  if (!node) {
+    node = el('div', { class: 'field__error', style: 'margin-top:8px' });
+    // 插在提示文字後面、按鈕前面，跟 renderLogin 的排法一致。
+    holder.insertBefore(node, holder.children[2] ?? null);
+  }
+  node.textContent = message;
+}
+
 function renderLogin(message) {
   clear(app);
   app.append(renderTopbar());
   const buttonHolder = el('div', { style: 'display:flex;justify-content:center;padding:24px 0' });
+  // 錯誤訊息用紅字自成一行，不要塞進原本那句灰色提示裡。
+  // 上線第一天就踩到：登入失敗時訊息被擺在 .field__hint 的位置，跟平常
+  // 那句「請使用 Google 帳號登入」長得一樣，使用者完全沒看到，回報是
+  // 「按了沒反應」。
+  const errNode = message
+    ? el('div', { class: 'field__error', style: 'margin-top:8px' }, message)
+    : null;
   app.append(
     el('div', { class: 'section', style: 'padding-top:48px;text-align:center' }, [
       el('div', { style: 'font-size:20px;font-weight:700' }, '劇本殺預約'),
-      el('div', { class: 'field__hint' }, message || '請使用 Google 帳號登入'),
+      el('div', { class: 'field__hint' }, '請使用 Google 帳號登入'),
+      errNode,
       buttonHolder,
-    ]),
+    ].filter(Boolean)),
   );
   renderGoogleButton(buttonHolder, (user, err) => {
     if (err) {
@@ -183,7 +205,10 @@ function renderLogin(message) {
         toast('已刪除的帳號', { error: true });
         return;
       }
-      renderLogin(err.message);
+      // ★ 不要重畫整個登入畫面。重畫會把 Google 的按鈕卸下再重新掛載，
+      //   使用者看到的是「載入圈消失又出現」，看起來像自己什麼都沒按到，
+      //   而真正的錯誤反而被蓋掉。改成原地顯示錯誤，按鈕保持不動。
+      showLoginError(err.message);
       return;
     }
     // user 是 null 有兩種可能，要分開。
