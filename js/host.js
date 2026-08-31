@@ -9,6 +9,7 @@
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
 import { hostMayConfirm } from './conflicts.js';
+import { showHosts } from './hosts-dialog.js';
 
 const TABS = [
   { key: 'pending', label: '待確認場次' },
@@ -148,20 +149,6 @@ export function createHostView() {
     }
   }
 
-  async function showHosts(bookingId) {
-    try {
-      const d = await api.get(`/api/bookings/${bookingId}/detail`);
-      const lines = d.gm_slots.map((s) => {
-        const who = s.user_name || '（未指定）';
-        const mark = s.confirmed ? '已確認' : '未確認';
-        return `${s.role_name}：${who}（${mark}）`;
-      });
-      await alertDialog({ title: '本場主持人', body: lines.join('\n') });
-    } catch (err) {
-      toast(err.message, { error: true });
-    }
-  }
-
   async function confirmBooking(item) {
     const ok = await confirmDialog({
       title: '確認主持指定',
@@ -244,14 +231,20 @@ export function createHostView() {
     const isPending = state.tab === 'pending';
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
+        el('div', { class: 'list-item__title' }, [
+          scriptName(item.mmg_name, item.mmg_url),
+          // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
+          // 時最需要一眼看到的——「這場我是誰」比「預定者是誰」先要緊。
+          item.role_name && el('span', { class: 'sep' }, '·'),
+          item.role_name && el('button', {
+            class: 'linklike', onClick: () => showHosts(item.id),
+          }, item.role_name),
+        ].filter(Boolean)),
         el('div', { class: 'list-item__meta' }, [
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
         ]),
         el('div', { class: 'list-item__links' }, [
           el('button', { class: 'linklike', onClick: () => showPlayer(item.id) }, item.player_name),
-          el('span', { class: 'sep' }, '·'),
-          el('button', { class: 'linklike', onClick: () => showHosts(item.id) }, item.role_name || '（角色）'),
         ]),
       ]),
       el('div', { class: 'list-item__side' }, [

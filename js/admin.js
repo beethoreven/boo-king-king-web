@@ -9,6 +9,7 @@
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
 import { adminMaySave } from './conflicts.js';
+import { showHosts } from './hosts-dialog.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -297,9 +298,15 @@ export function createAdminView() {
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
         el('div', { class: 'list-item__title' }, scriptName(m.name, m.url)),
+        // 三行固定分配。全部擠一行時會在「NT$」與金額之間斷開，看起來
+        // 像資料壞了；把金額獨立成一行，斷點就永遠落在我們決定的位置。
         el('div', { class: 'list-item__meta' },
           `${m.period ?? '—'} 小時（佈置 ${m.ready_time_cost ?? 0}／還原 ${m.reset_time_cost ?? 0}）`
-          + ` · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
+          // players 是自由文字，店家已經自己寫了「6人性別不詳」這種完整
+          // 描述，後面再補一個「人」就變成「…不詳 人」。
+          + ` · ${m.players ?? '—'}`),
+        el('div', { class: 'list-item__meta' },
+          `NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
         el('div', { class: 'list-item__meta' },
           m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
       ]),
@@ -869,7 +876,12 @@ export function createAdminView() {
       el('div', { class: 'card list-item' }, [
         el('div', { class: 'list-item__main' }, [
           el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
-          el('div', { class: 'list-item__meta' }, `${item.session_date} ${item.session_time} · ${item.player_name}`),
+          el('div', { class: 'list-item__meta' }, [
+            `${item.session_date} ${item.session_time} · ${item.player_name} · `,
+            // 只寫「主持」而不列人名：一場最多四個角色，列出來會把這一行
+            // 撐爆，而且真正要看的是「確認了沒」，那在對話框裡。
+            el('button', { class: 'linklike', onClick: () => showHosts(item.id) }, '主持'),
+          ]),
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),
         el('div', { class: 'list-item__side' },

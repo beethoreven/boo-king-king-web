@@ -796,4 +796,8 @@ iframe[src*="accounts.google.com"] {
   color: var(--ink-disabled);
   border-color: var(--border-soft);
   cursor: not-allowed;
+  /* ★ pointer-events: none 是關鍵。只改顏色的話，.btn--ghost 的 hover 與
+     :active 樣式照樣會觸發——按下去還是會亮起來，看起來像可以用。
+     停用的控制項不該對滑鼠有任何反應。 */
+  pointer-events: none;
 }

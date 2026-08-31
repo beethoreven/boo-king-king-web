@@ -68,10 +68,13 @@ export function createBookingView() {
   // 是連結才有的行為。停用時把 href 拿掉，<a> 沒有 href 就不可點，
   // 也不會進 tab 順序。
   const introLink = el('a', {
-    class: 'btn btn--ghost btn--small intro-btn',
+    // is-disabled 一開始就要掛上。只設 aria-disabled 的話它「真的點不開」
+    // 但「看起來是啟用的」——那比兩者都錯還糟，使用者會以為自己點壞了。
+    class: 'btn btn--ghost btn--small intro-btn is-disabled',
     target: '_blank',
     rel: 'noopener noreferrer',
     'aria-disabled': 'true',
+    title: '請先選擇劇本',
   }, '簡介');
 
   /** 依目前選中的劇本切換簡介按鈕。沒有可開的東西時一律停用。 */
@@ -824,7 +827,9 @@ export function createBookingView() {
     clear(tagRow);
     for (const tag of [
       d.period != null && `${d.period} 小時`,
-      d.players && `${d.players} 人`,
+      // players 是自由文字（例如「6人性別不詳」「4男2女可反串」），
+      // 店家已經把單位寫在裡面了，再補一個「人」會變成「…可反串 人」。
+      d.players,
       d.price != null && `NT$ ${d.price}`,
       d.booking_cost != null && `訂金 NT$ ${d.booking_cost}`,
     ]) {
