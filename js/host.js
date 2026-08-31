@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
 import { hostMayConfirm } from './conflicts.js';
 import { showHosts } from './hosts-dialog.js';
 
@@ -236,15 +236,13 @@ export function createHostView() {
           // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
           // 時最需要一眼看到的——「這場我是誰」比「預定者是誰」先要緊。
           item.role_name && el('span', { class: 'sep' }, '·'),
-          item.role_name && el('button', {
-            class: 'linklike', onClick: () => showHosts(item.id),
-          }, item.role_name),
+          item.role_name && asyncLink(item.role_name, () => showHosts(item.id)),
         ].filter(Boolean)),
         el('div', { class: 'list-item__meta' }, [
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
         ]),
         el('div', { class: 'list-item__links' }, [
-          el('button', { class: 'linklike', onClick: () => showPlayer(item.id) }, item.player_name),
+          asyncLink(item.player_name, () => showPlayer(item.id)),
         ]),
       ]),
       el('div', { class: 'list-item__side' }, [

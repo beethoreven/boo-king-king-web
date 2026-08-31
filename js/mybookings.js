@@ -10,7 +10,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, field, toast, spinner, scriptName } from './ui.js';
+import { el, clear, field, toast, spinner, scriptName, asyncLink} from './ui.js';
 import { showHosts } from './hosts-dialog.js';
 
 const EMPTY_FILTERS = { mmg_name: '', session_date: '', session_time: '' };
@@ -133,7 +133,7 @@ export function createMyBookingsView() {
           item.gm_names.length
             // 點開才看得到「誰、確認了沒」。列在這裡只有名字，而玩家真正
             // 想知道的是自己這場成立了沒——那要看確認狀態。
-            ? el('button', { class: 'linklike', onClick: () => showHosts(item.id) }, '主持')
+            ? asyncLink('主持', () => showHosts(item.id))
             : '尚未指定主持人'),
         // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
         // 是在講一件已經不會發生的事。

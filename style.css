@@ -801,3 +801,13 @@ iframe[src*="accounts.google.com"] {
      停用的控制項不該對滑鼠有任何反應。 */
   pointer-events: none;
 }
+
+/* 會打 API 的文字按鈕，等待中的樣子。
+   加 `…` 而不是換成 spinner，是因為這些按鈕就嵌在一行文字裡（角色名、
+   玩家名），塞一個轉圈圖會把行高撐開，整列跟著跳動。 */
+.linklike:disabled {
+  cursor: default;
+  color: var(--ink-disabled);
+  text-decoration: none;
+}
+.linklike.is-busy::after { content: '…'; }

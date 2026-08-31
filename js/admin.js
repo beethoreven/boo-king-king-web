@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
 import { adminMaySave } from './conflicts.js';
 import { showHosts } from './hosts-dialog.js';
 
@@ -880,7 +880,7 @@ export function createAdminView() {
             `${item.session_date} ${item.session_time} · ${item.player_name} · `,
             // 只寫「主持」而不列人名：一場最多四個角色，列出來會把這一行
             // 撐爆，而且真正要看的是「確認了沒」，那在對話框裡。
-            el('button', { class: 'linklike', onClick: () => showHosts(item.id) }, '主持'),
+            asyncLink('主持', () => showHosts(item.id)),
           ]),
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),

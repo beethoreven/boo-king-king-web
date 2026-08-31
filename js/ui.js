@@ -115,15 +115,23 @@ export function toast(message, { error = false, duration = 3200 } = {}) {
 
 // ── 對話框 ────────────────────────────────────────────────
 
+/** 目前掛在畫面上的那一個對話框的 close()。沒有就是 null。 */
+let openDialog = null;
+
 /**
  * 確認對話框。回傳 Promise<boolean>。
  *
  * 用在「按下去就回不來」的操作：確認主持指定、送出預約、改 email。
  * 一般的錯誤提示用 toast 就好，不要動不動就跳對話框擋住畫面。
+ *
+ * 同時只會有一個對話框存在，新的把舊的頂掉——理由寫在下面 openDialog 那段。
  */
 export function confirmDialog({ title, body, confirmText = '確認', cancelText = '取消', danger = false }) {
   return new Promise((resolve) => {
     const close = (result) => {
+      // 只有還掛在台上的那一個才有資格把 openDialog 清掉。少了這個比對，
+      // 一個被取代的舊對話框關閉時會把「現在這一個」的登記抹掉。
+      if (openDialog === close) openDialog = null;
       layer.remove();
       document.removeEventListener('keydown', onKey);
       resolve(result);
@@ -157,6 +165,20 @@ export function confirmDialog({ title, body, confirmText = '確認', cancelText 
       ]),
     );
 
+    // ★ 同時只留一個對話框，新的把舊的頂掉。
+    //
+    // 後端冷啟動時一支 API 要等快一分鐘。使用者點了沒反應會再點，等後端
+    // 醒來時每一次點擊各自開一個對話框，一口氣疊五層。實際遇過。
+    //
+    // 取代而不是忽略，是因為連點的內容一模一樣，最後那個就是答案。
+    // 被頂掉的那個 resolve(false)——往「當作沒按」的方向失敗，所以
+    // `if (await confirmDialog(...))` 這種寫法不會因此誤觸發破壞性操作。
+    //
+    // 全站的對話框都經過這裡，所以這條規則不需要各個呼叫點配合。現有的
+    // 用法全部是循序的（await 完前一個才開下一個），不會被這條影響。
+    if (openDialog) openDialog(false);
+    openDialog = close;
+
     document.addEventListener('keydown', onKey);
     document.body.append(layer);
     confirmBtn.focus();
@@ -166,6 +188,36 @@ export function confirmDialog({ title, body, confirmText = '確認', cancelText 
 /** 只有一個「確認」的告知對話框，用於送出前的錯誤彙總。 */
 export function alertDialog({ title, body }) {
   return confirmDialog({ title, body, confirmText: '確認', cancelText: null });
+}
+
+/**
+ * 會打 API 的文字按鈕（`.linklike`）。
+ *
+ * 上面 confirmDialog 那條「只留一個對話框」是保險，這個是治本的一半:
+ * 按下去之後按鈕會 disabled 並顯示 `…`，所以使用者看得出來它在跑，
+ * 不會以為沒反應而連點。
+ *
+ * ★ 防連點靠的就是 `disabled` 本身——disabled 的 button 根本不會派送
+ *   click 事件，所以不需要另外再寫一個 inflight 旗標。
+ *
+ * ★ finally 不能省。API 失敗（逾時、403、後端沒醒）時按鈕一樣要復原，
+ *   否則使用者只會得到一個永遠停在「…」而且再也點不動的東西。
+ */
+export function asyncLink(label, fn) {
+  const btn = el('button', {
+    class: 'linklike',
+    onClick: async () => {
+      btn.disabled = true;
+      btn.classList.add('is-busy');
+      try {
+        await fn();
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('is-busy');
+      }
+    },
+  }, label);
+  return btn;
 }
 
 /**
