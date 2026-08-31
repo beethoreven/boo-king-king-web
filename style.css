@@ -775,3 +775,25 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 iframe[src*="accounts.google.com"] {
   clip-path: inset(2px 10px round 999px);
 }
+
+/* 劇本名稱帶簡介連結時的樣式。用底線而不是換顏色——名稱本身在深色底上
+   已經是最亮的一級文字，再變色會跟「已選中」之類的狀態混淆。 */
+.link { color: inherit; text-decoration: underline; text-underline-offset: 3px;
+        text-decoration-color: var(--accent); cursor: pointer; }
+.link:hover { text-decoration-thickness: 2px; }
+
+/* 搜尋框 + 簡介按鈕同一排。搜尋框縮短、右邊留給按鈕。
+   案主的規格：搜尋框大約容納 20 個字就夠，不需要佔滿整排。 */
+.search-row { display: flex; align-items: center; gap: 8px; }
+.search-row .search-wrap { flex: 1 1 auto; min-width: 0; }
+.search-row .search-wrap input { width: 100%; }
+.intro-btn { flex: 0 0 auto; text-decoration: none; }
+
+/* 停用狀態。按鈕本身已經沒有 href（見 booking.js），這裡只負責讓它
+   看起來也是不能點的——兩者要一致，否則會出現「看起來灰的但點得動」
+   或反過來。 */
+.intro-btn.is-disabled {
+  color: var(--ink-disabled);
+  border-color: var(--border-soft);
+  cursor: not-allowed;
+}

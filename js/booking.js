@@ -22,7 +22,7 @@
 
 import { api, ApiError } from './api.js';
 import { createCalendar } from './calendar.js';
-import { el, clear, toast, confirmDialog, alertDialog, spinner } from './ui.js';
+import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl } from './ui.js';
 import { getUser } from './auth.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
@@ -61,10 +61,44 @@ export function createBookingView() {
   });
   const searchResults = el('div', { class: 'search-results', hidden: true });
 
+  // 簡介按鈕。永遠存在、只切換啟用與否——不要在「有連結」時才建立它，
+  // 那會讓這一排在切換劇本時忽寬忽窄。
+  //
+  // 用 <a> 而不是 <button>：使用者可以中鍵、可以「在新分頁開啟」，那些
+  // 是連結才有的行為。停用時把 href 拿掉，<a> 沒有 href 就不可點，
+  // 也不會進 tab 順序。
+  const introLink = el('a', {
+    class: 'btn btn--ghost btn--small intro-btn',
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    'aria-disabled': 'true',
+  }, '簡介');
+
+  /** 依目前選中的劇本切換簡介按鈕。沒有可開的東西時一律停用。 */
+  function refreshIntro() {
+    const url = isHttpUrl(state.detail?.url);
+    if (url) {
+      introLink.href = url;
+      introLink.removeAttribute('aria-disabled');
+      introLink.classList.remove('is-disabled');
+      introLink.title = '開啟劇本簡介';
+    } else {
+      // ★ 一定要移除 href，不能只加 class。留著的話鍵盤與中鍵仍然點得開，
+      //   而使用者看到的是一顆灰掉的按鈕——那是兩套互相矛盾的說法。
+      introLink.removeAttribute('href');
+      introLink.setAttribute('aria-disabled', 'true');
+      introLink.classList.add('is-disabled');
+      introLink.title = state.detail ? '這齣戲沒有簡介連結' : '請先選擇劇本';
+    }
+  }
+
   const scriptSection = el('div', { class: 'section' }, [
     el('div', { class: 'section__label' }, '選擇劇本'),
     el('div', { class: 'select-wrap' }, scriptSelect),
-    el('div', { class: 'search-wrap' }, [searchInput, searchResults]),
+    el('div', { class: 'search-row' }, [
+      el('div', { class: 'search-wrap' }, [searchInput, searchResults]),
+      introLink,
+    ]),
   ]);
 
   // 劇本資訊標籤（純顯示，內容可以整批換掉，沒有焦點問題）
@@ -429,6 +463,9 @@ export function createBookingView() {
     state.detail = null;
     state.availability = null;
     monthCache.clear();
+    // 先鎖住。換劇本的當下還不知道新劇本有沒有簡介，讓按鈕停在上一齣的
+    // 連結上是最糟的——會把人帶去別齣戲的簡介。
+    refreshIntro();
     if (value) {
       try {
         // 兩支一起發，不要一支等完再發另一支——它們互不相依，串起來只是
@@ -446,6 +483,7 @@ export function createBookingView() {
       }
     }
     if (seq !== scriptSeq) return;
+    refreshIntro();
     applyAvailability();
     render();
   }

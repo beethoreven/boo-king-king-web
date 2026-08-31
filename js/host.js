@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
 import { hostMayConfirm } from './conflicts.js';
 
 const TABS = [
@@ -244,7 +244,7 @@ export function createHostView() {
     const isPending = state.tab === 'pending';
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, item.mmg_name),
+        el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
         el('div', { class: 'list-item__meta' }, [
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
         ]),

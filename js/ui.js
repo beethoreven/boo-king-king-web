@@ -167,3 +167,43 @@ export function confirmDialog({ title, body, confirmText = '確認', cancelText 
 export function alertDialog({ title, body }) {
   return confirmDialog({ title, body, confirmText: '確認', cancelText: null });
 }
+
+/**
+ * 劇本名稱。有簡介連結就變成可以點的連結（開新分頁），沒有就是純文字。
+ *
+ * 四個畫面都要用（劇本管理、場次管理、主持人介面、我預約的場次），所以
+ * 放這裡。散在各處各寫一份的話，遲早有一個地方忘記加 rel、或忘記處理
+ * 沒有連結的情況。
+ *
+ * ★ rel="noopener noreferrer" 不能省。target="_blank" 會讓被開啟的頁面
+ *   拿到 window.opener，那是一個可以反過來把我們這一頁導向別處的把手
+ *   （分頁挾持）。簡介連結是店家自己填的，但那不代表填進來的一定是
+ *   他們控制的網域。
+ *
+ * ★ 只接受 http/https。填進來的字串可能是 javascript: 開頭——那會讓
+ *   一個「看起來只是簡介連結」的欄位變成在別人瀏覽器上執行程式的入口。
+ *   不合格就退回純文字，不要嘗試修正它。
+ */
+export function scriptName(name, url, extraClass = '') {
+  const safe = isHttpUrl(url);
+  if (!safe) return el('span', { class: extraClass }, name ?? '');
+  return el('a', {
+    class: `link ${extraClass}`.trim(),
+    href: safe,
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    title: '開啟劇本簡介',
+  }, name ?? '');
+}
+
+/** 是 http/https 就回傳整理過的網址，否則回傳空字串。 */
+export function isHttpUrl(raw) {
+  const text = (raw ?? '').trim();
+  if (!text) return '';
+  try {
+    const u = new URL(text);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+  } catch {
+    return '';
+  }
+}

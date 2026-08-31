@@ -10,7 +10,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, field, toast, spinner } from './ui.js';
+import { el, clear, field, toast, spinner, scriptName } from './ui.js';
 
 const EMPTY_FILTERS = { mmg_name: '', session_date: '', session_time: '' };
 
@@ -125,7 +125,7 @@ export function createMyBookingsView() {
     const due = item.booking_cost ?? 0;
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, item.mmg_name),
+        el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
         el('div', { class: 'list-item__meta' },
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`),
         el('div', { class: 'list-item__meta' },

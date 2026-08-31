@@ -7,7 +7,7 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner } from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName } from './ui.js';
 import { adminMaySave } from './conflicts.js';
 
 const SECTIONS = [
@@ -71,7 +71,7 @@ const BOOKING_STATUS_OPTIONS = [
 // 新增時的空白資料。用函式而不是常數，因為裡面有陣列——共用同一個物件
 // 會讓上一次沒存檔的編輯殘留到下一次新增。
 const emptyMmg = () => ({
-  id: null, name: '', period: null, price: null, booking_cost: null,
+  id: null, name: '', url: '', period: null, price: null, booking_cost: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
   // 新劇本預設此刻上架。上架是一個明確的時刻，不只是日期。
@@ -296,7 +296,7 @@ export function createAdminView() {
     const s = state.mmg;
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, m.name),
+        el('div', { class: 'list-item__title' }, scriptName(m.name, m.url)),
         el('div', { class: 'list-item__meta' },
           `${m.period ?? '—'} 小時（佈置 ${m.ready_time_cost ?? 0}／還原 ${m.reset_time_cost ?? 0}）`
           + ` · ${m.players ?? '—'} 人 · NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
@@ -319,6 +319,14 @@ export function createAdminView() {
     return el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, m.id ? `編輯劇本 #${m.id}` : '新增劇本'),
       field({ label: '名稱', control: el('input', { type: 'text', value: m.name ?? '', onInput: setField('name') }) }),
+      field({
+        label: '簡介連結',
+        control: el('input', {
+          type: 'url', value: m.url ?? '', placeholder: 'https://…（留空＝沒有簡介）',
+          onInput: setField('url'),
+        }),
+        hint: '填了之後，各個畫面上的劇本名稱就會變成可以點的連結，開新分頁。只接受 http／https',
+      }),
       el('div', { class: 'row' }, [
         field({ label: '時長（小時）', control: el('input', { type: 'number', step: '0.1', value: m.period ?? '', onInput: setNum('period') }) }),
         field({ label: '人數（顯示用）', control: el('input', { type: 'text', value: m.players ?? '', onInput: setField('players') }) }),
@@ -860,7 +868,7 @@ export function createAdminView() {
     nodes.push(el('div', { class: 'section' }, el('div', { class: 'list' }, t.items.map((item) =>
       el('div', { class: 'card list-item' }, [
         el('div', { class: 'list-item__main' }, [
-          el('div', { class: 'list-item__title' }, item.mmg_name),
+          el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
           el('div', { class: 'list-item__meta' }, `${item.session_date} ${item.session_time} · ${item.player_name}`),
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),
