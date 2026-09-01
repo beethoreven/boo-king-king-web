@@ -25,11 +25,13 @@ const ABUSE_KIND_LABEL = {
   rate_limit: '請求過於頻繁',
 };
 
-const ROLE_OPTIONS = [
-  { value: 1, label: '管理員' },
-  { value: 2, label: '主持人' },
-  { value: 3, label: '一般玩家' },
-];
+// 角色選項由後端跟著使用者清單一起回（roles 表是唯一的來源）。
+//
+// ★ 這裡不留一份寫死的備份。有備份的話，後端沒回或回錯時畫面會安靜地
+//   顯示舊的名稱——而清單上的名稱來自後端、下拉裡的來自這裡，同一個畫面
+//   上同一個角色兩種寫法，那是最難查的一種不一致。沒拿到就讓下拉是空的，
+//   那看得出來出事了。
+let roleOptions = [];
 
 // ★ 管理員只能在啟用／停用之間切換。「已刪除」不在這裡，因為後端的
 //   SELECTABLE_STATUSES 只收這兩個——刪除帳號是本人才做得到的動作，
@@ -159,6 +161,9 @@ export function createAdminView() {
     try {
       const d = await api.get('/api/admin/users');
       state.users.items = d.items;
+      // 後端跟清單一起回，所以不用多一次請求，也不會有「清單的名稱」與
+      // 「下拉的名稱」來自不同時間點的問題。
+      if (Array.isArray(d.roles)) roleOptions = d.roles;
     } catch (err) { toast(err.message, { error: true }); }
     state.users.loading = false;
     render();
@@ -804,7 +809,7 @@ export function createAdminView() {
       el('div', { class: 'row' }, [
         field({
           label: '角色',
-          control: select({ options: ROLE_OPTIONS, value: u.role, onChange: (v) => { u.role = Number(v); }, ariaLabel: '角色' }),
+          control: select({ options: roleOptions, value: u.role, onChange: (v) => { u.role = Number(v); }, ariaLabel: '角色' }),
         }),
         field({
           label: '狀態',
