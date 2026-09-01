@@ -739,20 +739,24 @@ export function createAdminView() {
   }
 
   /**
-   * 「（因異常行為停權至 9 月 1 日 20:45）」。
+   * 「停權至 9 月 4 日 20:41」。
    *
-   * 只到分，同年不寫年份——這一行接在名字後面，寫太長會換行。
+   * ★ 不寫「因異常行為」也不加括弧。這段接在名字後面，而旁邊的
+   *   「異常停權」晶片已經說了原因——重複一次只是把這一行撐長，
+   *   長到日期會被拆成兩行（實際發生過）。這裡只負責回答「到什麼時候」。
+   *
+   * 只到分，同年不寫年份，理由同上。
    */
   function banNote(u) {
-    if (!u.banned_until) return '（因異常行為停權）';
+    if (!u.banned_until) return '無解除期限';
     const d = new Date(u.banned_until);
-    if (Number.isNaN(d.getTime())) return '（因異常行為停權）';
+    if (Number.isNaN(d.getTime())) return '無解除期限';
     const pad = (n) => String(n).padStart(2, '0');
     const sameYear = d.getFullYear() === new Date().getFullYear();
     const ymd = sameYear
       ? `${d.getMonth() + 1} 月 ${d.getDate()} 日`
       : `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
-    return `（因異常行為停權至 ${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}）`;
+    return `停權至 ${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function userRow(u) {

@@ -816,11 +816,14 @@ iframe[src*="accounts.google.com"] {
    擠在一起讀起來像錯誤訊息，而它其實是給他的說明。 */
 .blocked-note { display: flex; flex-direction: column; gap: 6px; line-height: 1.8; }
 
-/* 名字後面的停權註記。比名字小、比正文淡——它是補充，不是標題的一部分。 */
+/* 名字後面的停權註記。比名字小、比正文淡——它是補充，不是標題的一部分。
+   nowrap 是必要的：不加的話「9 月 4 日 20:41」會被拆到兩行中間，
+   而一個斷在半路的日期比沒有日期更難讀。要換行就整段一起換。 */
 .ban-note {
   margin-left: 8px;
   font-size: 12px;
   font-weight: 400;
   color: var(--danger);
+  white-space: nowrap;
 }
 .status-chip--warn { color: var(--danger); background: var(--danger-soft); }
