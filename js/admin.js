@@ -40,9 +40,17 @@ const ROLE_OPTIONS = [
 //   在對方目前就是 deleted 時，才把這個選項補上去當作可離開的起點。
 //   直接把它列成常駐選項的話，管理員會在一個正常帳號上選到它，然後
 //   收到一句「未知的狀態」——畫面提供了一個後端根本不接受的動作。
+// ★ 三個標籤刻意把「誰決定的」寫進去。deactive 與 banned 在系統裡是兩件
+//   事（前者是店家的決定、後者是異常行為），但光看「停用／停權」兩個詞
+//   分不出來，管理員會挑錯。
+//
+// ★ banned 一定要在清單裡。少了它，一個已經被停權的帳號打開編輯畫面時
+//   下拉沒有對應選項，會顯示成「啟用」（說謊），而存檔會被後端退回
+//   「未知的狀態」——那個帳號連改個電話都做不到。
 const USER_STATUS_OPTIONS = [
   { value: 'active', label: '啟用' },
-  { value: 'deactive', label: '停用' },
+  { value: 'deactive', label: '停用（店家關閉）' },
+  { value: 'banned', label: '停權（異常行為）' },
 ];
 
 const DELETED_OPTION = { value: 'deleted', label: '已刪除（本人刪除）' };
@@ -790,6 +798,12 @@ export function createAdminView() {
         field({
           label: '狀態',
           control: select({ options: statusOptionsFor(original?.status ?? u.status), value: u.status, onChange: (v) => { u.status = v; }, ariaLabel: '狀態' }),
+          // 已經被停權的人，管理員在這裡要看到兩件事才做得了決定：還剩多久
+          // （不然會去手動解一個五分鐘後自己就會過期的停權），以及改回啟用
+          // 會連異常點數一起歸零（那是刻意的，但不說沒人知道）。
+          hint: original?.status === 'banned'
+            ? `${banNote(original)}　改回「啟用」會解除停權並把異常點數歸零`
+            : undefined,
         }),
       ]),
       el('div', { class: 'row' }, [
