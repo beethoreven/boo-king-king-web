@@ -723,17 +723,41 @@ export function createAdminView() {
     ]);
   }
 
+  /**
+   * 「（因異常行為停權至 9 月 1 日 20:45）」。
+   *
+   * 只到分，同年不寫年份——這一行接在名字後面，寫太長會換行。
+   */
+  function banNote(u) {
+    if (!u.banned_until) return '（因異常行為停權）';
+    const d = new Date(u.banned_until);
+    if (Number.isNaN(d.getTime())) return '（因異常行為停權）';
+    const pad = (n) => String(n).padStart(2, '0');
+    const sameYear = d.getFullYear() === new Date().getFullYear();
+    const ymd = sameYear
+      ? `${d.getMonth() + 1} 月 ${d.getDate()} 日`
+      : `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+    return `（因異常行為停權至 ${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}）`;
+  }
+
   function userRow(u) {
     const s = state.users;
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, u.name || '（未命名）'),
+        el('div', { class: 'list-item__title' }, [
+          u.name || '（未命名）',
+          // 系統判定的停權要在名字旁邊講清楚「到什麼時候」——不知道還剩
+          // 多久的話，管理員會不必要地去手動解一個五分鐘後自己就過期的停權。
+          u.status === 'banned' && el('span', { class: 'ban-note' }, banNote(u)),
+        ].filter(Boolean)),
         el('div', { class: 'list-item__meta' }, u.email),
         el('div', { class: 'list-item__meta' },
           [u.role_label, u.line_id && `LINE ${u.line_id}`, u.phone].filter(Boolean).join(' · ')),
       ]),
       el('div', { class: 'list-item__side' }, [
-        u.status !== 'active' && el('div', { class: 'status-chip' }, '停用'),
+        u.status === 'banned'
+          ? el('div', { class: 'status-chip status-chip--warn' }, '異常停權')
+          : u.status !== 'active' && el('div', { class: 'status-chip' }, '停用'),
         el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(u); render(); } }, '編輯'),
       ]),
     ]);

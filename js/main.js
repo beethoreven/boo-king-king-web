@@ -258,13 +258,52 @@ function renderRegister() {
 }
 
 /**
+ * 把停權到期時間寫成人看得懂的樣子。
+ *
+ * 只到「分」，不寫秒——秒的精度對「我還要等多久」沒有幫助，只會讓那一行
+ * 更長。跨年時才補上年份，平常寫「9 月 1 日 20:45」就夠。
+ */
+function formatBanUntil(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymd = sameYear
+    ? `${d.getMonth() + 1} 月 ${d.getDate()} 日`
+    : `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+  return `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
  * 被停權的人看到的畫面：標題列與選單，其餘什麼都沒有。
  *
  * 不把他丟回登入頁，因為他的憑證是有效的——丟回去只會讓他一直重登，
  * 每次都成功、每次都進不來。讓他看見「進得來但什麼都沒有」，比讓他
  * 猜自己是不是密碼打錯了誠實。
+ *
+ * 兩種停權說的話不一樣：
+ *   deactive —— 店家關掉的。沒有到期這回事，只能聯絡店家。
+ *   banned   —— 系統判定的異常行為。**一定要說到什麼時候**：5 分鐘跟
+ *               30 天的處置完全不同，只說「你被停權了」會讓人不知道
+ *               該等一下還是該打電話。
  */
 function renderBlocked() {
+  const blocked = getBlockedStatus() || {};
+  const lines = [];
+
+  if (blocked.status === 'banned') {
+    const until = blocked.bannedUntil ? formatBanUntil(blocked.bannedUntil) : null;
+    lines.push(until
+      ? `因異常行為暫時停權至 ${until}`
+      // 到期時間是 null 代表無限期（abuse_rule 的 ban_seconds 設 0）。
+      // 不要編一個時間出來，直接說沒有期限。
+      : '因異常行為停權，未設定解除期限');
+    lines.push('若有誤判請聯繫管理員');
+    if (blocked.adminName) lines.push(`步經徑管理員為${blocked.adminName}`);
+  } else {
+    lines.push('此帳號未獲授權，請聯絡店家');
+  }
+
   clear(app);
   app.append(
     el('div', { class: 'topbar' }, [
@@ -272,10 +311,12 @@ function renderBlocked() {
       el('div', { class: 'topbar__actions' }, [userMenu()]),
     ]),
     // toast 三秒就消失，而這是這位使用者畫面上唯一的解釋——晚幾秒看
-    // 螢幕就只剩一片空白，不知道自己為什麼進不去。常駐一行說明。
-    el('div', { class: 'empty' }, '此帳號未獲授權，請聯絡店家'),
+    // 螢幕就只剩一片空白，不知道自己為什麼進不去。常駐說明。
+    el('div', { class: 'empty blocked-note' },
+      lines.map((t) => el('div', {}, t))),
   );
-  toast('未授權的使用者', { error: true });
+  toast(blocked.status === 'banned' ? '此帳號因異常行為停權' : '未授權的使用者',
+        { error: true });
 }
 
 async function start() {

@@ -25,6 +25,10 @@ let pendingRegistration = null;
 
 // 登入了、註冊過，但帳號被停權。這是第四種狀態：他進得了畫面，只是
 // 什麼都做不了。跟「沒登入」分開，否則他會被丟回登入頁一直重登。
+//
+// 存的是整包資訊而不只是狀態字串，因為兩種停權要說的話不一樣：
+//   deactive —— 店家關掉的，只能聯絡店家
+//   banned   —— 系統判定的異常行為，有明確的到期時間可以告訴他
 let blockedStatus = null;
 
 export function getUser() {
@@ -36,7 +40,13 @@ export function getPendingRegistration() {
   return pendingRegistration;
 }
 
-/** 帳號被停權時回傳狀態字串（目前只有 'deactive'），否則 null。 */
+/**
+ * 帳號被停權時回傳 { status, bannedUntil, adminName }，否則 null。
+ *
+ * status 是 'deactive'（店家關的）或 'banned'（系統判定的異常行為）。
+ * bannedUntil 只有 banned 才有值，而且可能是 null——那代表無限期，
+ * 只能等管理員手動解。
+ */
 export function getBlockedStatus() {
   return blockedStatus;
 }
@@ -63,7 +73,13 @@ export async function refreshStatus() {
     currentUser = status.authorized ? status : null;
     pendingRegistration = (!status.authorized && !status.registered)
       ? { email: status.email } : null;
-    blockedStatus = (!status.authorized && status.registered) ? status.status : null;
+    blockedStatus = (!status.authorized && status.registered)
+      ? {
+          status: status.status,
+          bannedUntil: status.banned_until ?? null,
+          adminName: status.admin_name ?? null,
+        }
+      : null;
     return currentUser;
   } catch {
     // 401 已經在 api.js 清掉 token 並觸發 handler
