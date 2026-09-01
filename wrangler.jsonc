@@ -8,7 +8,13 @@
   //
   // ★ 沒有 "main" 欄位是刻意的：那是 Worker 程式的進入點，我們沒有伺服器
   //   程式要跑。只有 assets 的設定就代表「純靜態」。
-  "name": "booking-king-web",
+  // ★ 這個名字就是網址的第一段：<name>.<帳號子網域>.workers.dev
+  //   改了它會部署出一個**新的** Worker，舊名字那個不會自動消失——
+  //   要到 Workers & Pages 手動刪。好處是切換期間舊網址還活著。
+  //
+  //   改名之後 CORS 與 Google OAuth 的授權來源都要跟著改，否則整站
+  //   `Failed to fetch`、或登入壞掉（見 meta repo 的 README Part F）。
+  "name": "booking-king",
   "compatibility_date": "2026-08-31",
 
   // 整個 repo 根目錄就是網站內容，index.html 在根目錄。
