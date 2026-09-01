@@ -62,8 +62,10 @@ function statusOptionsFor(current) {
 }
 
 const MMG_STATUS_OPTIONS = [
-  // 尚未上架的劇本玩家連清單都看不到。上架時刻一到會自動轉成上架，
-  // 下架時刻一到會自動轉成下架——不需要手動回來改。
+  // 尚未上架的劇本玩家連清單都看不到。開放預約時刻一到會自動轉成上架。
+  //
+  // ★ 「下架」只能手動設。預約終止時間到了不會自動下架——那個欄位管的是
+  //   「還能不能預約」，不是「這齣戲還在不在架上」。
   { value: 'preparing', label: '尚未上架' },
   { value: 'active', label: '上架' },
   { value: 'inactive', label: '下架' },
@@ -510,20 +512,24 @@ export function createAdminView() {
 
     return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:10px' }, [
       el('div', { class: 'row' }, [
-        field({ label: '上架時間（必填）',
+        field({ label: '開放預約時間（必填）',
           control: el('input', { type: 'datetime-local', value: m.start_booking ?? '', required: true,
             onChange: (e) => { m.start_booking = e.target.value || ''; render(); } }) }),
-        field({ label: '下架時間',
+        field({ label: '預約終止時間',
           control: el('input', { type: 'datetime-local', value: m.end_booking ?? '',
             onChange: (e) => { m.end_booking = e.target.value || null; render(); } }) }),
       ]),
       el('div', { class: 'field__hint' },
-        '下架時間留空＝不打算下架。這是絕對外框，區間外就算設了特例日也不會開放'),
+        '預約終止時間留空＝不打算終止。這是絕對外框，區間外就算設了特例日也不會開放'),
       el('div', { class: 'field__hint' },
-        '狀態設為「尚未上架」時，一到上架時間會自動轉成上架；到下架時間會自動轉成下架'),
-      // 上架時間是必填的。一齣連上架時間都掛不出來的戲，代表它還沒真的
+        '狀態設為「尚未上架」時，一到開放預約時間會自動轉成上架'),
+      // ★ 終止時間到了「不會」自動下架，這是刻意的：有的店家不打算把戲收
+      //   起來，只是不再接這齣的預約。時間過了就訂不到，但狀態維持上架。
+      el('div', { class: 'field__hint' },
+        '終止時間到了不會自動下架，只是不能再預約；要下架請自行把狀態改成「下架」'),
+      // 開放預約時間是必填的。一齣連開賣時間都掛不出來的戲，代表它還沒真的
       // 要賣，那它就不該出現在玩家訂得到的清單裡。
-      !m.start_booking && el('div', { class: 'field__error' }, '上架時間不能空白'),
+      !m.start_booking && el('div', { class: 'field__error' }, '開放預約時間不能空白'),
       listingOrderError(m) && el('div', { class: 'field__error' }, listingOrderError(m)),
 
       el('div', { class: 'section__label', style: 'margin-top:4px' }, '每週開放時段'),
@@ -553,10 +559,11 @@ export function createAdminView() {
     ].filter(Boolean));
   }
 
-  /** 下架早於上架時的錯誤字串，沒問題回空字串。 */
+  /** 終止早於開放時的錯誤字串，沒問題回空字串。 */
   function listingOrderError(m) {
     if (!m.start_booking || !m.end_booking) return '';
-    return m.end_booking <= m.start_booking ? '下架時間必須晚於上架時間' : '';
+    return m.end_booking <= m.start_booking
+      ? '預約終止時間必須晚於開放預約時間' : '';
   }
 
   function renderWeekday(d, wd) {
