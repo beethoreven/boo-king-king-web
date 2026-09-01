@@ -4,14 +4,33 @@
  * 分散出去就會有地方漏掉。
  */
 
-// 後端位址。同源時留空（前端和 API 同一個 origin，用相對路徑即可）；
-// 本機開發前端跑在別的 port 時，用 ?apiBase=http://localhost:5001 覆寫。
+// 前端跑在 localhost 上就是本機開發，沒有第二種可能——正式站掛在
+// Cloudflare 的網域下。
+const HOST = window.location.hostname;
+const IS_LOCAL = HOST === 'localhost' || HOST === '127.0.0.1' || HOST === '[::1]';
+
+// 後端位址，依序取第一個有值的。
+//
+// ★ 本機那一段不能省。index.html 裡寫死的是**正式站**的後端網址，而本機開發
+//   用的是同一份 index.html——少了這一段，在 localhost 開頁面而忘記帶
+//   ?apiBase= 的話，這一頁會對正式後端說話。
+//
+//   正式資料不會因此被寫壞：正式站的 ALLOWED_ORIGINS 不含 localhost，
+//   帶 Authorization 的請求都要先過預檢，而預檢回應不含
+//   access-control-allow-origin，瀏覽器就不會送出真正的請求（2026-09-01 實測）。
+//   真正的代價是**症狀會騙人**——畫面顯示 `Failed to fetch`，看起來像「本機後端
+//   沒開」，實際上是「這一頁在跟正式站說話，而正式站不認識它」。查錯方向會歪很久。
+//   附帶一提，預檢那個 OPTIONS 還是會送到正式站，把它叫醒。
+//
+//   所以這裡直接給本機一個合理的預設值，讓那個紀律變成不必要。5001 是後端的
+//   預設 port（app.py 的 PORT 預設值）。要在本機打正式站仍然可以，帶
+//   ?apiBase= 就好——查詢參數永遠優先。
 //
 // zh-cn-to-tw 的對應邏輯要處理「同源 / GitHub Pages / 桌面版」三種情況，
-// 這裡只有「靜態託管前端 + Render 後端」一種，所以簡化成一個常數加一個
-// 可覆寫的參數。
+// 這裡只有「靜態託管前端 + Render 後端」一種，所以簡化成這樣。
 const API_BASE =
   new URLSearchParams(window.location.search).get('apiBase') ??
+  (IS_LOCAL ? 'http://localhost:5001' : null) ??
   window.__BOOKING_KING_API_BASE__ ??
   '';
 
