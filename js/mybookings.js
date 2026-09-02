@@ -12,7 +12,8 @@
 import { api } from './api.js';
 import { el, clear, field, toast, spinner, scriptName, asyncLink} from './ui.js';
 import { showGms } from './gms-dialog.js';
-import { setRouteTab, slugs, slugGap, slugGapNode, STATUS_SLUG } from './route.js';
+import { setRouteTab, slugs, slugGap, slugGapNode, STATUS_SLUG,
+         newInstance } from './route.js';
 
 // 頁籤就是後端那五個 status，網址名稱與管理員的場次管理共用同一份。
 const tabRoute = slugs(STATUS_SLUG);
@@ -24,6 +25,8 @@ const hasActiveFilter = (f) => Object.values(f).some((v) => v !== '');
 const emptyTab = () => ({
   items: [], has_more: false, start: 1,
   filters: { ...EMPTY_FILTERS }, loading: true, loaded: false,
+  // 這一次載入是不是失敗了（≠ 這個狀態真的沒有場次）
+  failed: false,
 });
 
 /**
@@ -35,6 +38,8 @@ const emptyTab = () => ({
  */
 export function createMyBookingsView({ tab } = {}) {
   const root = el('div', { class: 'view' });
+  // 這個實例的號碼，寫網址時帶著（見 route.js 的 newInstance）。
+  const instance = newInstance();
 
   const state = {
     tabs: {},        // {key: 中文標籤}，後端給的
@@ -48,6 +53,11 @@ export function createMyBookingsView({ tab } = {}) {
     gap: null,
   };
 
+
+  // 過期的回應不要蓋掉比較新的結果——理由與寫法見 gm.js 的同一段。
+  const claim = (slot) => (slot.seq = (slot.seq ?? 0) + 1);
+  const stale = (slot, mine) => mine !== slot.seq;
+
   async function loadTabs() {
     try {
       const d = await api.get('/api/bookings/mine/tabs');
@@ -60,7 +70,7 @@ export function createMyBookingsView({ tab } = {}) {
       // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個頁籤。
       const wanted = tabRoute.toKey(tab);
       state.tab = state.tabOrder.includes(wanted) ? wanted : state.tabOrder[0];
-      setRouteTab('mybookings', tabRoute.toSlug(state.tab));
+      setRouteTab('mybookings', tabRoute.toSlug(state.tab), instance);
     } catch (err) {
       toast(err.message, { error: true });
     }
@@ -71,14 +81,20 @@ export function createMyBookingsView({ tab } = {}) {
 
   async function reloadTab(key) {
     const t = state.data[key];
+    const mine = claim(t);
     t.loading = true;
     render();
     try {
-      Object.assign(t, await api.get(`/api/bookings/mine/tab/${key}`, {
+      const got = await api.get(`/api/bookings/mine/tab/${key}`, {
         start: t.start, ...t.filters,
-      }));
+      });
+      if (stale(t, mine)) return;
+      Object.assign(t, got);
       t.loaded = true;
+      t.failed = false;
     } catch (err) {
+      if (stale(t, mine)) return;
+      t.failed = true;
       toast(err.message, { error: true });
     }
     t.loading = false;
@@ -87,7 +103,7 @@ export function createMyBookingsView({ tab } = {}) {
 
   function switchTab(key) {
     state.tab = key;
-    setRouteTab('mybookings', tabRoute.toSlug(key));
+    setRouteTab('mybookings', tabRoute.toSlug(key), instance);
     state.draft = { ...state.data[key].filters };
     // 還沒抓過的才抓。已經看過的那一包留著，來回切不必重打。
     if (!state.data[key].loaded) reloadTab(key);
@@ -219,8 +235,9 @@ export function createMyBookingsView({ tab } = {}) {
 
     if (t.loading) { root.append(spinner()); return; }
     if (!t.items.length) {
-      root.append(el('div', { class: 'empty' },
-        hasActiveFilter(t.filters) ? '沒有符合篩選條件的場次' : '這個狀態目前沒有場次'));
+      root.append(el('div', { class: 'empty' }, t.failed
+        ? '讀取失敗，請稍後再試'
+        : (hasActiveFilter(t.filters) ? '沒有符合篩選條件的場次' : '這個狀態目前沒有場次')));
       return;
     }
 

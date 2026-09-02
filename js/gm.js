@@ -9,7 +9,7 @@
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
 import { gmMayConfirm } from './conflicts.js';
-import { setRouteTab, slugs, assertSlugs } from './route.js';
+import { setRouteTab, slugs, assertSlugs, newInstance } from './route.js';
 import { showGms } from './gms-dialog.js';
 
 const TABS = [
@@ -43,6 +43,8 @@ const EMPTY_FILTERS = {
  */
 export function createGmView({ tab } = {}) {
   const root = el('div', { class: 'view' });
+  // 這個實例的號碼。寫網址時帶著，讓被丟掉的舊實例寫不進去。
+  const instance = newInstance();
 
   const state = {
     tab: tabRoute.toKey(tab) ?? 'pending',
@@ -52,7 +54,9 @@ export function createGmView({ tab } = {}) {
       // stale：這一包的內容已經被別的動作改掉了，但使用者還沒切過來看。
       // 標記起來、等他真的切過去再重抓，不要在他還沒要看的時候先打 API。
       { items: [], has_more: false, start: 1, filters: { ...EMPTY_FILTERS },
-        loading: true, stale: false },
+        loading: true, stale: false,
+        // 這一次載入是不是失敗了（≠ 真的沒有場次）
+        failed: false },
     ])),
     filterOpen: false,
     // 後端回的狀態選項。還沒載到之前是空的，篩選器就只有「全部」——
@@ -63,16 +67,37 @@ export function createGmView({ tab } = {}) {
     draft: { ...EMPTY_FILTERS },
   };
 
+
+  // 過期的回應不要蓋掉比較新的結果。
+  //
+  // 同一包資料可能同時有兩個請求在飛（連按兩下「下一頁」、改完篩選又馬上再改），
+  // 而**回來的順序不保證跟送出的順序一樣**。沒有這個保護的話，先送的那個後回來，
+  // 就會把舊資料蓋在新資料上——畫面列出第 2 頁的內容，頁碼卻寫著第 3 頁。
+  //
+  // 號碼記在「要被寫入的那個物件」上，不是整個畫面共用一個：切頁籤不該讓另一個
+  // 頁籤還在飛的請求作廢，那會讓已經抓過的那包白抓一次。
+  // （寫法沿用 calendar.js 的 seq。）
+  const claim = (slot) => (slot.seq = (slot.seq ?? 0) + 1);
+  const stale = (slot, mine) => mine !== slot.seq;
+
   async function loadAll() {
+    const mine = Object.fromEntries(TABS.map((t) => [t.key, claim(state.tabs[t.key])]));
     try {
       const data = await api.get('/api/gm/dashboard');
       for (const t of TABS) {
-        Object.assign(state.tabs[t.key], data[t.key], { loading: false });
+        if (stale(state.tabs[t.key], mine[t.key])) continue;
+        Object.assign(state.tabs[t.key], data[t.key], { loading: false, failed: false });
       }
       state.statusOptions = data.status_options ?? [];
     } catch (err) {
+      // ★ 載入失敗要留下痕跡。只跳一個三秒就消失的 toast、把清單留成空的，
+      //   畫面顯示的就是「目前沒有…」——跟真的沒資料長得一模一樣。
+      //   /api/admin/abuse 壞了好幾個 commit 沒人發現就是這樣蓋掉的。
       toast(err.message, { error: true });
-      for (const t of TABS) state.tabs[t.key].loading = false;
+      for (const t of TABS) {
+        if (stale(state.tabs[t.key], mine[t.key])) continue;
+        Object.assign(state.tabs[t.key], { loading: false, failed: true });
+      }
     }
     render();
   }
@@ -80,6 +105,7 @@ export function createGmView({ tab } = {}) {
   /** 只重載當前頁籤。翻頁與篩選都走這裡。 */
   async function reloadTab(key) {
     const tab = state.tabs[key];
+    const mine = claim(tab);
     tab.loading = true;
     render();
     try {
@@ -87,8 +113,12 @@ export function createGmView({ tab } = {}) {
         start: tab.start,
         ...tab.filters,
       });
+      if (stale(tab, mine)) return;
       Object.assign(tab, data);
+      tab.failed = false;
     } catch (err) {
+      if (stale(tab, mine)) return;
+      tab.failed = true;
       toast(err.message, { error: true });
     }
     tab.loading = false;
@@ -133,7 +163,7 @@ export function createGmView({ tab } = {}) {
 
   function switchTab(key) {
     state.tab = key;
-    setRouteTab('gm', tabRoute.toSlug(key));
+    setRouteTab('gm', tabRoute.toSlug(key), instance);
     // 篩選條件是各頁籤自己的，切過去時把草稿同步成該頁籤目前生效的條件
     state.draft = { ...state.tabs[key].filters };
     // 被標記過期的才重抓。這是「確認場次」之後那一包會走的路：
@@ -320,7 +350,9 @@ export function createGmView({ tab } = {}) {
       return;
     }
     if (!tab.items.length) {
-      root.append(el('div', { class: 'empty' }, hasActiveFilter(tab.filters) ? '沒有符合篩選條件的場次' : '目前沒有場次'));
+      root.append(el('div', { class: 'empty' }, tab.failed
+        ? '讀取失敗，請稍後再試'
+        : (hasActiveFilter(tab.filters) ? '沒有符合篩選條件的場次' : '目前沒有場次')));
       return;
     }
 
@@ -331,7 +363,7 @@ export function createGmView({ tab } = {}) {
 
   // 網址帶了無效的頁籤（舊連結、拼錯）時，pickTab 已經退回 pending 了，
   // 這裡把網址一起改正——否則網址會停在一個跟畫面對不起來的值上。
-  setRouteTab('gm', tabRoute.toSlug(state.tab));
+  setRouteTab('gm', tabRoute.toSlug(state.tab), instance);
   // 先畫一次再去要資料。少了這一行，root 會在整個載入期間是空的——
   // 使用者看到的是一片空白，分不出「還在載」與「真的沒東西」。
   render();

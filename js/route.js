@@ -105,23 +105,49 @@ function stillOn(viewSlug) {
   return readRoute().view === viewSlug;
 }
 
+// 畫面實例的流水號。
+//
+// ★ 為什麼 stillOn() 一個人不夠：它問的是「網址還停在這個畫面嗎」，擋得住
+//   「離開之後才回來的回應」，但擋不住**同一個畫面的兩個實例**。
+//
+//   每次切畫面，renderApp() 會 clear(app) 把舊畫面整個丟掉、再建一個新的。
+//   舊那個物件沒有人再看它，但它送出去的請求還在飛，回來時照樣會執行。所以：
+//
+//     1. 從信裡點進 ?view=mybookings&tab=booked → 實例 ①，loadTabs() 送出
+//     2. 很快按「回到預約」，再從選單點回「我預定的場次」→ 實例 ②
+//        （這次網址沒有 tab，會落在第一個頁籤）
+//     3. 實例 ① 的回應這時才回來，呼叫 setRouteTab('mybookings', 'booked')
+//     4. stillOn('mybookings') 是**真**的——實例 ② 也在 mybookings → 放行
+//     5. 網址寫著 booked，畫面顯示的卻是第一個頁籤
+//
+//   網址說謊，而且使用者一重新整理就會跳到另一個頁籤，不知道為什麼。
+//
+//   所以再問一句「我還是**最新的那個實例**嗎」。
+let instanceSeq = 0;
+
+/** 建一個畫面實例時領號。寫網址時要把號碼帶回來。 */
+export function newInstance() {
+  return ++instanceSeq;
+}
+
 /**
  * 只換頁籤，畫面不動。**會一併清掉 sub**——子頁籤是依附在頁籤底下的，
  * 換了頁籤之後舊的 sub 就沒有意義了。
  *
- * viewSlug 是呼叫端自己屬於哪個畫面（gm.js 永遠是 'gm'，以此類推）。
+ * viewSlug 是呼叫端自己屬於哪個畫面（gm.js 永遠是 'gm'，以此類推）；
+ * instance 是它建立時領到的號碼（見 newInstance）。
  */
-export function setRouteTab(viewSlug, tab) {
-  if (!stillOn(viewSlug)) return;
+export function setRouteTab(viewSlug, tab, instance) {
+  if (!stillOn(viewSlug) || instance !== instanceSeq) return;
   apply((q) => {
     if (tab) q.set(TAB, tab); else q.delete(TAB);
     q.delete(SUB);
   }, false);
 }
 
-/** 只換子頁籤。同樣先確認網址還停在這個畫面。 */
-export function setRouteSub(viewSlug, sub) {
-  if (!stillOn(viewSlug)) return;
+/** 只換子頁籤。同樣先確認網址還停在這個畫面、而且自己還是最新的實例。 */
+export function setRouteSub(viewSlug, sub, instance) {
+  if (!stillOn(viewSlug) || instance !== instanceSeq) return;
   apply((q) => { if (sub) q.set(SUB, sub); else q.delete(SUB); }, false);
 }
 
@@ -152,19 +178,37 @@ export const STATUS_SLUG = {
   cancelled: 'cancelled',
 };
 
-/** 把一張 {內部key: 網址值} 包成雙向查詢。 */
+/**
+ * 把一張 {內部key: 網址值} 包成雙向查詢。
+ *
+ * ★ 兩張表都用 Object.create(null) 建，而且只認自己的屬性。
+ *
+ *   查表的鍵直接來自網址，而普通物件會**繼承 Object.prototype**——
+ *   `back['__proto__']` 會回傳那個原型物件、`back['constructor']` 會回傳
+ *   一個函式，兩者都是 truthy，所以 `?tab=__proto__` 不會退回預設值，而是
+ *   讓 state.section 變成一個「不是字串的東西」。實測（2026-09-02）：
+ *
+ *     toKey('__proto__')    => object（不是 null）
+ *     toKey('constructor')  => function（不是 null）
+ *
+ *   後果不算嚴重（畫面會落在錯的那一節），但這是「使用者輸入被當成合法值」
+ *   的標準形狀，不該留著。
+ */
 export function slugs(table) {
-  const back = Object.fromEntries(Object.entries(table).map(([k, v]) => [v, k]));
+  const fwd = Object.assign(Object.create(null), table);
+  const back = Object.create(null);
+  for (const [k, v] of Object.entries(table)) back[v] = k;
+  const own = (obj, k) => typeof k === 'string' && Object.hasOwn(obj, k);
   return {
     /** 內部 key → 網址值。 */
-    toSlug: (key) => table[key] ?? null,
+    toSlug: (key) => (own(fwd, key) ? fwd[key] : null),
     /**
      * 網址值 → 內部 key。對不到回 null。
      *
      * ★ 這裡對不到**不是**錯誤：網址是使用者給的，可能是舊連結或手打錯的。
      *   要檢查完整性的是「表」，不是「使用者輸入的值」。
      */
-    toKey: (slug) => (slug && back[slug]) || null,
+    toKey: (slug) => (own(back, slug) ? back[slug] : null),
   };
 }
 

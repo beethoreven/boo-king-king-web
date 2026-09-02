@@ -11,7 +11,7 @@ import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, s
 import { adminMaySave } from './conflicts.js';
 import { showGms } from './gms-dialog.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
-         STATUS_SLUG } from './route.js';
+         STATUS_SLUG, newInstance } from './route.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -140,6 +140,8 @@ const EMPTY_BOOKING_FILTERS = {
  */
 export function createAdminView({ tab, sub } = {}) {
   const root = el('div', { class: 'view' });
+  // 這個實例的號碼，寫網址時帶著（見 route.js 的 newInstance）。
+  const instance = newInstance();
 
   // ★ sub 要在這裡先讀走。底下 setRouteTab() 會把網址上的 sub 清掉（換頁籤
   //   本來就該清），所以晚一步再讀就讀不到了。
@@ -147,8 +149,9 @@ export function createAdminView({ tab, sub } = {}) {
 
   const state = {
     section: sectionRoute.toKey(tab) ?? 'mmg',
-    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, search: '' },
-    users: { items: [], loading: true, editing: null, search: '' },
+    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, search: '',
+           failed: false },
+    users: { items: [], loading: true, editing: null, search: '', failed: false },
     abuse: { items: [], has_more: false, start: 1, loading: true, meta: {},
              failed: false },
     bookings: {
@@ -157,6 +160,7 @@ export function createAdminView({ tab, sub } = {}) {
       tab: initialSub,    // 網址指定的子頁籤，載到清單之後才驗得了
       data: {},           // {key: {items, has_more, start, filters, loading}}
       gap: null,          // 網址名稱表沒蓋到某個子頁籤時要顯示的話
+      failed: false,      // 這一次載入是不是失敗了（≠ 真的沒有場次）
       editing: null,
       filterOpen: false,
       draft: { ...EMPTY_BOOKING_FILTERS },
@@ -165,44 +169,64 @@ export function createAdminView({ tab, sub } = {}) {
 
   // ── 載入 ────────────────────────────────────────────────
 
+
+  // 過期的回應不要蓋掉比較新的結果——理由與寫法見 gm.js 的同一段。
+  const claim = (slot) => (slot.seq = (slot.seq ?? 0) + 1);
+  const stale = (slot, mine) => mine !== slot.seq;
+
   async function loadMmg() {
+    const mine = claim(state.mmg);
     state.mmg.loading = true;
     render();
     try {
       const d = await api.get('/api/admin/mmg');
+      if (stale(state.mmg, mine)) return;
       state.mmg.items = d.items;
       state.mmg.gmCandidates = d.gm_candidates;
       state.mmg.rooms = d.rooms ?? [];
-    } catch (err) { toast(err.message, { error: true }); }
+      state.mmg.failed = false;
+    } catch (err) {
+      if (stale(state.mmg, mine)) return;
+      state.mmg.failed = true; toast(err.message, { error: true });
+    }
     state.mmg.loading = false;
     render();
   }
 
   async function loadUsers() {
+    const mine = claim(state.users);
     state.users.loading = true;
     render();
     try {
       const d = await api.get('/api/admin/users');
+      if (stale(state.users, mine)) return;
       state.users.items = d.items;
       // 後端跟清單一起回，所以不用多一次請求，也不會有「清單的名稱」與
       // 「下拉的名稱」來自不同時間點的問題。
       if (Array.isArray(d.roles)) roleOptions = d.roles;
-    } catch (err) { toast(err.message, { error: true }); }
+      state.users.failed = false;
+    } catch (err) {
+      if (stale(state.users, mine)) return;
+      state.users.failed = true; toast(err.message, { error: true });
+    }
     state.users.loading = false;
     render();
   }
 
   async function loadAbuse() {
     const s = state.abuse;
+    const mine = claim(s);
     s.loading = true;
     render();
     try {
       const d = await api.get('/api/admin/abuse', { start: s.start });
+      if (stale(s, mine)) return;
       s.items = d.items;
       s.has_more = d.has_more;
       s.meta = { auto: d.auto_deactivate, limit: d.rate_limit_per_minute };
       s.failed = false;
     } catch (err) {
+      if (stale(s, mine)) return;
       // ★ 失敗要留下痕跡，不能只跳一個三秒就消失的 toast。原本沒有這個
       //   旗標，所以 /api/admin/abuse 壞掉的那段期間，畫面顯示的是
       //   「目前沒有異常紀錄」——跟「真的沒有人觸發過」長得一模一樣，
@@ -216,8 +240,10 @@ export function createAdminView({ tab, sub } = {}) {
 
   async function loadBookings() {
     const b = state.bookings;
+    const mine = claim(b);
     try {
       const d = await api.get('/api/admin/bookings');
+      if (stale(b, mine)) return;
       b.tabs = d.tabs;
       b.tabOrder = Object.keys(d.tabs);
       // 子頁籤清單是後端給的，完整性只能在這裡檢查。
@@ -226,7 +252,7 @@ export function createAdminView({ tab, sub } = {}) {
       // ★ 一定要對 tabOrder 驗一次：b.tab 直接來自網址，指到一個不存在的
       //   子頁籤時底下 b.data[b.tab] 會是 undefined，畫面會整個炸掉。
       b.tab = b.tabOrder.includes(b.tab) ? b.tab : b.tabOrder[0];
-      setRouteSub('admin', subRoute.toSlug(b.tab));
+      setRouteSub('admin', subRoute.toSlug(b.tab), instance);
       for (const key of b.tabOrder) {
         b.data[key] = {
           ...d.data[key], start: 1,
@@ -234,26 +260,43 @@ export function createAdminView({ tab, sub } = {}) {
           loading: false,
         };
       }
-    } catch (err) { toast(err.message, { error: true }); }
+      b.failed = false;
+    } catch (err) {
+      if (stale(b, mine)) return;
+      // ★ b.tab 可能是網址帶進來的值（?sub=），而這裡失敗代表 b.data 還是
+      //   空的——不清掉的話 renderBookingsList() 的 b.data[b.tab] 會是
+      //   undefined，讀 t.loading 直接 TypeError，整個管理員介面白畫面。
+      //   （b.tab 原本初始是 null，是「從網址帶初始子頁籤」這個功能引進的。）
+      b.tab = null;
+      b.failed = true;
+      toast(err.message, { error: true });
+    }
     render();
   }
 
   async function reloadBookingTab(key) {
     const t = state.bookings.data[key];
+    const mine = claim(t);
     t.loading = true;
     render();
     try {
-      Object.assign(t, await api.get(`/api/admin/bookings/tab/${key}`, {
+      const got = await api.get(`/api/admin/bookings/tab/${key}`, {
         start: t.start, ...t.filters,
-      }));
-    } catch (err) { toast(err.message, { error: true }); }
+      });
+      if (stale(t, mine)) return;
+      Object.assign(t, got);
+      t.failed = false;
+    } catch (err) {
+      if (stale(t, mine)) return;
+      t.failed = true; toast(err.message, { error: true });
+    }
     t.loading = false;
     render();
   }
 
   function loadSection(key) {
     state.section = key;
-    setRouteTab('admin', sectionRoute.toSlug(key));
+    setRouteTab('admin', sectionRoute.toSlug(key), instance);
     if (key === 'mmg') loadMmg();
     else if (key === 'users') loadUsers();
     else if (key === 'abuse') loadAbuse();
@@ -332,7 +375,9 @@ export function createAdminView({ tab, sub } = {}) {
       const term = s.search.trim().toLowerCase();
       const hits = term ? s.items.filter((m) => m.name.toLowerCase().includes(term)) : s.items;
       if (!hits.length) {
-        node.append(el('div', { class: 'empty' }, term ? '沒有符合的劇本' : '目前沒有劇本'));
+        node.append(el('div', { class: 'empty' }, s.failed
+          ? '讀取失敗，請稍後再試'
+          : (term ? '沒有符合的劇本' : '目前沒有劇本')));
         return;
       }
       for (const m of hits) node.append(mmgRow(m));
@@ -767,7 +812,9 @@ export function createAdminView({ tab, sub } = {}) {
         ? s.items.filter((u) => `${u.name ?? ''} ${u.email}`.toLowerCase().includes(term))
         : s.items;
       if (!hits.length) {
-        node.append(el('div', { class: 'empty' }, term ? '沒有符合的使用者' : '目前沒有使用者'));
+        node.append(el('div', { class: 'empty' }, s.failed
+          ? '讀取失敗，請稍後再試'
+          : (term ? '沒有符合的使用者' : '目前沒有使用者')));
         return;
       }
       for (const u of hits) node.append(userRow(u));
@@ -898,8 +945,18 @@ export function createAdminView({ tab, sub } = {}) {
 
   function renderBookingsList() {
     const b = state.bookings;
-    if (!b.tab) return spinner();
+    if (b.failed) return el('div', { class: 'empty' }, '讀取失敗，請稍後再試');
+    // ★ 用「資料在不在」判斷，不要用「b.tab 有沒有值」。
+    //
+    //   b.tab 可能是網址帶進來的（?sub=），那時候 b.data 還是空的——而
+    //   createAdminView() 一開始就會呼叫 loadMmg()，它會立刻 render() 一次。
+    //   那一次 render 就落在這個空窗裡：b.tab 有值、b.data[b.tab] 是
+    //   undefined，讀 t.loading 直接 TypeError。
+    //
+    //   而且它**不只在載入失敗時發生**，正常載入也會炸一次，只是後面那次
+    //   render 把畫面蓋回正確的樣子，所以看起來沒事。實測抓到的。
     const t = b.data[b.tab];
+    if (!t) return spinner();
 
     const nodes = [
       el('div', { class: 'tabs' }, b.tabOrder.map((key) =>
@@ -907,7 +964,7 @@ export function createAdminView({ tab, sub } = {}) {
           class: `tab${key === b.tab ? ' tab--active' : ''}`,
           onClick: () => {
             b.tab = key;
-            setRouteSub('admin', subRoute.toSlug(key));
+            setRouteSub('admin', subRoute.toSlug(key), instance);
             b.draft = { ...t.filters };
             render();
           },
@@ -969,7 +1026,11 @@ export function createAdminView({ tab, sub } = {}) {
     }
 
     if (t.loading) { nodes.push(spinner()); return el('div', {}, nodes); }
-    if (!t.items.length) { nodes.push(el('div', { class: 'empty' }, '這個狀態目前沒有場次')); return el('div', {}, nodes); }
+    if (!t.items.length) {
+      nodes.push(el('div', { class: 'empty' },
+        t.failed ? '讀取失敗，請稍後再試' : '這個狀態目前沒有場次'));
+      return el('div', {}, nodes);
+    }
 
     nodes.push(el('div', { class: 'section' }, el('div', { class: 'list' }, t.items.map((item) =>
       el('div', { class: 'card list-item' }, [
@@ -1224,11 +1285,17 @@ export function createAdminView({ tab, sub } = {}) {
         disabled: !s.items.length,
         onClick: () => clearAbuse(null),
       }, '清除全部紀錄'),
-      // 把目前的模式寫在畫面上。停權與否是一個常數決定的，去翻程式碼才
-      // 知道現在是哪一種，等於這一頁看到的數字沒辦法解讀。
-      el('div', { class: 'field__hint' },
+      // 把目前的模式寫在畫面上。去翻程式碼才知道現在是哪一種，等於這一頁
+      // 看到的數字沒辦法解讀。
+      //
+      // ★ 載入失敗時**不要畫這一行**。s.meta 是空的，它會退成
+      //   「每分鐘上限 — 次；目前只記錄，不會自動停權」——一句用肯定語氣
+      //   講出來的假話（實際上限 240，而且真的會自動停權）。這正是先前
+      //   /api/admin/abuse 壞掉時螢幕上顯示的東西，也是它為什麼看起來
+      //   很正常。沒有資料就什麼都不要說。
+      s.failed ? null : el('div', { class: 'field__hint' },
         `每分鐘上限 ${s.meta.limit ?? '—'} 次${s.meta.auto ? '；超標會自動停權' : '；目前只記錄，不會自動停權'}`),
-    ]);
+    ].filter(Boolean));
 
     if (s.failed) {
       return el('div', {}, [header,
@@ -1361,7 +1428,7 @@ export function createAdminView({ tab, sub } = {}) {
   loadMmg();
   // loadSection('mmg') 會再打一次 loadMmg()，所以預設那一節只寫網址、
   // 不重複呼叫。
-  if (state.section === 'mmg') setRouteTab('admin', sectionRoute.toSlug('mmg'));
+  if (state.section === 'mmg') setRouteTab('admin', sectionRoute.toSlug('mmg'), instance);
   else loadSection(state.section);
   return root;
 }
