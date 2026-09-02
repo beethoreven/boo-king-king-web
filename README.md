@@ -27,9 +27,10 @@ python3 -m http.server 5173
 | `auth.js` | Google 登入按鈕與 session 建立 |
 | `ui.js` | 共用元件：`el` / `select` / `field` / `toast` / 對話框 |
 | `booking.js` | 玩家預約畫面 |
-| `host.js` | 主持人介面（待確認／已確認／已結束） |
+| `gm.js` | 主持人介面（待確認／已確認／已結束） |
 | `admin.js` | 管理員介面（劇本／場次／使用者） |
 | `main.js` | 外殼與畫面切換 |
+| `route.js` | 網址路由（`?view=&tab=&sub=`）與網址名稱對照表 |
 
 ## 兩條硬規則
 

@@ -149,7 +149,8 @@ export function createAdminView({ tab, sub } = {}) {
     section: sectionRoute.toKey(tab) ?? 'mmg',
     mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, search: '' },
     users: { items: [], loading: true, editing: null, search: '' },
-    abuse: { items: [], has_more: false, start: 1, loading: true, meta: {} },
+    abuse: { items: [], has_more: false, start: 1, loading: true, meta: {},
+             failed: false },
     bookings: {
       tabs: {},           // 後端給的 {key: 中文標籤}
       tabOrder: [],
@@ -200,7 +201,15 @@ export function createAdminView({ tab, sub } = {}) {
       s.items = d.items;
       s.has_more = d.has_more;
       s.meta = { auto: d.auto_deactivate, limit: d.rate_limit_per_minute };
-    } catch (err) { toast(err.message, { error: true }); }
+      s.failed = false;
+    } catch (err) {
+      // ★ 失敗要留下痕跡，不能只跳一個三秒就消失的 toast。原本沒有這個
+      //   旗標，所以 /api/admin/abuse 壞掉的那段期間，畫面顯示的是
+      //   「目前沒有異常紀錄」——跟「真的沒有人觸發過」長得一模一樣，
+      //   於是那支 500 存活了好幾個 commit 沒有人發現。
+      s.failed = true;
+      toast(err.message, { error: true });
+    }
     s.loading = false;
     render();
   }
@@ -1221,6 +1230,10 @@ export function createAdminView({ tab, sub } = {}) {
         `每分鐘上限 ${s.meta.limit ?? '—'} 次${s.meta.auto ? '；超標會自動停權' : '；目前只記錄，不會自動停權'}`),
     ]);
 
+    if (s.failed) {
+      return el('div', {}, [header,
+        el('div', { class: 'empty' }, '讀取失敗，請稍後再試')]);
+    }
     if (!s.items.length) {
       return el('div', {}, [header, el('div', { class: 'empty' }, '目前沒有異常紀錄')]);
     }
