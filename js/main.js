@@ -78,6 +78,27 @@ function brandIcon() {
   return el('img', { class: 'topbar__mark', src: 'brand-mark.png', alt: '', 'aria-hidden': 'true' });
 }
 
+// 目前打開的那個選單面板，以及「點別的地方就收起來」的監聽器。
+//
+// 綁在 document 上而不是遮罩層：遮罩會擋住底下的內容，而這個選單小到不需要
+// 把整頁鎖起來。（這個理由是原本就有的，沒變。）
+//
+// ★ 監聽器掛在**模組層，只掛一次**。原本寫在 userMenu() 裡面，而 userMenu()
+//   在 renderTopbar() 裡、renderTopbar() 又在每次 renderApp() 都會跑——所以
+//   每切一次畫面就多掛一個，而且從來不拆。功能沒壞（舊的那些都在對已經被丟掉
+//   的面板設 hidden，看不出影響），但監聽器與它們抓住的 DOM 節點會一直累積。
+//   路由做完之後上一頁／下一頁也會重畫，累積得比以前快。
+let openPanel = null;
+
+function closeMenu() {
+  if (openPanel) {
+    openPanel.hidden = true;
+    openPanel = null;
+  }
+}
+
+document.addEventListener('click', closeMenu);
+
 /**
  * 右上角的使用者選單。
  *
@@ -101,7 +122,7 @@ function userMenu() {
     items.map(([label, onClick]) =>
       el('button', {
         class: 'menu__item',
-        onClick: () => { panel.hidden = true; onClick(); },
+        onClick: () => { closeMenu(); onClick(); },
       }, label),
     ),
   );
@@ -110,12 +131,14 @@ function userMenu() {
     class: 'btn btn--ghost btn--small menu__toggle',
     'aria-label': '選單',
     'aria-haspopup': 'true',
-    onClick: (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; },
+    onClick: (e) => {
+      e.stopPropagation();
+      const opening = panel.hidden;
+      closeMenu();
+      panel.hidden = !opening;
+      openPanel = opening ? panel : null;
+    },
   }, menuIcon());
-
-  // 點別的地方就收起來。綁在 document 上而不是遮罩層：遮罩會擋住底下的
-  // 內容，而這個選單小到不需要把整頁鎖起來。
-  document.addEventListener('click', () => { panel.hidden = true; });
 
   return el('div', { class: 'menu' }, [toggle, panel]);
 }
