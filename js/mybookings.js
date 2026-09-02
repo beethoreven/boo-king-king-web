@@ -11,7 +11,11 @@
 
 import { api } from './api.js';
 import { el, clear, field, toast, spinner, scriptName, asyncLink} from './ui.js';
-import { showHosts } from './hosts-dialog.js';
+import { showGms } from './gms-dialog.js';
+import { setRouteTab, slugs, slugGap, slugGapNode, STATUS_SLUG } from './route.js';
+
+// 頁籤就是後端那五個 status，網址名稱與管理員的場次管理共用同一份。
+const tabRoute = slugs(STATUS_SLUG);
 
 const EMPTY_FILTERS = { mmg_name: '', session_date: '', session_time: '' };
 
@@ -22,7 +26,14 @@ const emptyTab = () => ({
   filters: { ...EMPTY_FILTERS }, loading: true, loaded: false,
 });
 
-export function createMyBookingsView() {
+/**
+ * initialTab 來自網址（?view=mybookings&tab=）。「預約成功」那封信帶
+ * booked 進來。
+ *
+ * ★ 頁籤清單是後端給的，所以有效性**只能在 loadTabs() 拿到清單之後**
+ *   才判定得了——不能在這裡先驗。
+ */
+export function createMyBookingsView({ tab } = {}) {
   const root = el('div', { class: 'view' });
 
   const state = {
@@ -33,6 +44,8 @@ export function createMyBookingsView() {
     filterOpen: false,
     draft: { ...EMPTY_FILTERS },
     loading: true,
+    // 網址名稱表沒蓋到後端給的某個頁籤時，這裡放一句要顯示出來的話。
+    gap: null,
   };
 
   async function loadTabs() {
@@ -41,7 +54,13 @@ export function createMyBookingsView() {
       state.tabs = d.tabs;
       state.tabOrder = Object.keys(d.tabs);
       for (const key of state.tabOrder) state.data[key] = emptyTab();
-      state.tab = state.tabOrder[0];
+      // 頁籤清單是後端給的，所以完整性只能在這裡檢查——不像靜態的表可以
+      // 在載入時就擋下來。
+      state.gap = slugGap('我預定的場次', STATUS_SLUG, state.tabOrder);
+      // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個頁籤。
+      const wanted = tabRoute.toKey(tab);
+      state.tab = state.tabOrder.includes(wanted) ? wanted : state.tabOrder[0];
+      setRouteTab('mybookings', tabRoute.toSlug(state.tab));
     } catch (err) {
       toast(err.message, { error: true });
     }
@@ -68,6 +87,7 @@ export function createMyBookingsView() {
 
   function switchTab(key) {
     state.tab = key;
+    setRouteTab('mybookings', tabRoute.toSlug(key));
     state.draft = { ...state.data[key].filters };
     // 還沒抓過的才抓。已經看過的那一包留著，來回切不必重打。
     if (!state.data[key].loaded) reloadTab(key);
@@ -133,7 +153,7 @@ export function createMyBookingsView() {
           item.gm_names.length
             // 點開才看得到「誰、確認了沒」。列在這裡只有名字，而玩家真正
             // 想知道的是自己這場成立了沒——那要看確認狀態。
-            ? asyncLink('主持', () => showHosts(item.id))
+            ? asyncLink('主持', () => showGms(item.id))
             : '尚未指定主持人'),
         // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
         // 是在講一件已經不會發生的事。
@@ -191,6 +211,8 @@ export function createMyBookingsView() {
         hasActiveFilter(t.filters) && el('div', { class: 'field__hint' }, '篩選中'),
       ]),
     );
+
+    if (state.gap) root.append(slugGapNode(state.gap));
 
     const panel = renderFilterPanel();
     if (panel) root.append(panel);

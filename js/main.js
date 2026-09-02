@@ -2,9 +2,14 @@
  * 應用程式進入點：啟動、頂端列、畫面切換。
  *
  * 「畫面」目前有三個：預約（所有人）、主持人介面（role<=2）、
- * 管理員介面（role=1）。切換純粹是替換 #app 裡的內容，沒有網址路由——
- * 這個規模不需要，而且沒有路由就不會有「重新整理後停在一個沒權限的
- * 頁面」這種要額外處理的狀態。
+ * 管理員介面（role=1）。切換是替換 #app 裡的內容，同時把位置寫進網址
+ * （?view=&tab=，見 route.js）。
+ *
+ * ★ 這裡原本刻意沒有路由，理由是「這個規模不需要，而且沒有路由就不會有
+ *   重新整理後停在一個沒權限的頁面」。第一個理由被通知信推翻了——五封信
+ *   的按鈕都要落到特定畫面的特定頁籤，沒有路由就一律落在預約畫面。第二個
+ *   理由則是**在寫下那段話之後就自己消失了**：renderApp() 底下那段權限
+ *   退回是後來獨立加上去的，而它正好就是路由需要的那道保護。
  */
 
 import { setUnauthorizedHandler } from './api.js';
@@ -12,18 +17,19 @@ import { refreshStatus, logout, getUser, hasRole, renderGoogleButton,
          getPendingRegistration, getBlockedStatus } from './auth.js';
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
-import { createHostView } from './host.js';
+import { createGmView } from './gm.js';
 import { createAdminView } from './admin.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
 import { createMyBookingsView } from './mybookings.js';
+import { readRoute, pushRoute, replaceRoute, onRouteChange, slugs, assertSlugs } from './route.js';
 
 const app = document.getElementById('app');
 
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
-  host: { label: '主持人介面', minRole: 2, build: () => createHostView() },
-  admin: { label: '管理員介面', minRole: 1, build: () => createAdminView() },
+  gm: { label: '主持人介面', minRole: 2, build: (route) => createGmView(route) },
+  admin: { label: '管理員介面', minRole: 1, build: (route) => createAdminView(route) },
   // 選單裡的頁面。不放進頂欄的切換按鈕，所以 minRole 只是形式上的下限。
   profile: {
     label: '使用者資料', minRole: 3,
@@ -38,8 +44,26 @@ const VIEWS = {
     }),
   },
   mybookings: { label: '我預定的場次', minRole: 3, menuOnly: true,
-    build: () => createMyBookingsView() },
+    build: (route) => createMyBookingsView(route) },
 };
+
+/**
+ * 畫面的網址名稱。內部 key 與網址值分開，讓網址可以取一個對外好讀的名字
+ * 而不必動到程式裡的變數名——profile 在網址上叫 account 就是這樣來的。
+ *
+ * ★ 這張表**必須剛好覆蓋 VIEWS**，下面那行會在載入時檢查。少一個畫面的
+ *   話它的網址值會是 null，切過去就變成「什麼都不帶」＝回到預約畫面，
+ *   而且不會有任何錯誤。所以寧可讓整個模組載不起來。
+ */
+const VIEW_SLUG = {
+  booking: 'booking',   // 是預設值，實際上不會寫進網址（見 route.js）
+  gm: 'gm',
+  admin: 'admin',
+  profile: 'account',
+  mybookings: 'mybookings',
+};
+assertSlugs('畫面', VIEW_SLUG, Object.keys(VIEWS));
+const viewRoute = slugs(VIEW_SLUG);
 
 let currentView = 'booking';
 
@@ -146,21 +170,51 @@ function renderTopbar() {
 }
 
 function switchView(key) {
+  // 同一個畫面點第二次不留歷史紀錄——選單裡的「使用者資料」在使用者資料
+  // 頁上仍然點得到，每點一次就多一筆的話，之後按上一頁會看起來沒反應。
+  if (key !== currentView) pushRoute({ view: viewRoute.toSlug(key) });
   currentView = key;
   renderApp();
 }
 
+/**
+ * 畫出目前的畫面。**這裡是唯一會修正 currentView 的地方。**
+ *
+ * 兩種要修正的情況合成同一條：
+ *   1. 權限在切換之後才改變（例如管理員把自己降級）
+ *   2. 網址帶了一個不存在或權限不足的 view（?view=打錯了、玩家點到主持人的信）
+ *
+ * 第 2 種是路由帶來的新情況，但它需要的保護跟第 1 種一模一樣，所以不另外
+ * 寫一段——退回預約畫面。
+ *
+ * ★ 退回時**網址要跟著改**，否則它會留在 ?view=admin 上說謊：使用者重新
+ *   整理會再退一次，而他每次都看到同一個網址配上不同的畫面。用 replace
+ *   不用 push，因為這不是一次導覽，是修正一個到不了的位置。
+ *
+ * ★ 修正要在 renderTopbar() **之前**做完。頂欄是照 currentView 決定要放
+ *   哪幾顆切換鈕的，先畫就會畫出一組跟底下內容對不起來的按鈕。
+ */
 function renderApp() {
+  if (!VIEWS[currentView] || !hasRole(VIEWS[currentView].minRole)) {
+    currentView = 'booking';
+  }
+  // 網址上的畫面跟實際畫出來的不一樣就修正。
+  //
+  // ★ 條件不能寫成「有沒有走上面那個 if」。不存在的 view（?view=打錯了）
+  //   在 start() 讀進來的當下就已經被正規化成 booking 了，所以上面那個 if
+  //   根本不會成立，而網址還留著那個打錯的值——實測抓到的（2026-09-02）。
+  //   改成比對「網址說的」與「實際畫的」，兩種情況就都蓋得到。
+  //
+  // ★ 相等時**不寫**。每次重畫都寫一次的話，replaceRoute 會把 tab 與 sub
+  //   一起清掉，等於每次重畫都把使用者踢回預設頁籤。
+  const wantView = currentView === 'booking' ? null : viewRoute.toSlug(currentView);
+  if (readRoute().view !== wantView) replaceRoute({ view: wantView });
+
   clear(app);
   app.append(renderTopbar());
-  const view = VIEWS[currentView];
-  if (!hasRole(view.minRole)) {
-    // 權限在切換之後才改變（例如管理員把自己降級）的保險
-    currentView = 'booking';
-    app.append(VIEWS.booking.build());
-    return;
-  }
-  app.append(view.build());
+  // 頁籤與子頁籤直接讀網址，不另外存一份。存了就會有「state 說 abuse、
+  // 網址說 users」這種兩邊不同步的狀態，而網址才是使用者看得到的那一份。
+  app.append(VIEWS[currentView].build(readRoute()));
 }
 
 /** 在既有的登入畫面上顯示錯誤，不重畫、不動 Google 按鈕。 */
@@ -219,7 +273,11 @@ function renderLogin(message) {
       return;
     }
     toast(`歡迎，${user.name || user.email}`);
-    currentView = 'booking';
+    // ★ 這裡原本寫 currentView = 'booking'。不能留：從信裡點進來的人多半
+    //   還沒登入，被要求登入、登入完卻被丟回預約畫面，等於整條路由白做——
+    //   而這正是做這件事的主要動機。Google 登入不會重新載入頁面（走的是
+    //   JS callback，不是轉址），所以 start() 從網址讀進來的 currentView
+    //   到這裡還在。權限不夠的話 renderApp() 會自己退回預約畫面。
     renderApp();
   });
 }
@@ -250,8 +308,9 @@ function renderRegister() {
     el('div', { class: 'section', style: 'padding-top:32px;text-align:center' }, [
       el('div', { style: 'font-size:20px;font-weight:700' }, '完成註冊'),
     ]),
+    // 剛註冊完的人一定是 role 3，網址就算指著主持人介面也會被 renderApp()
+    // 退回預約畫面。所以這裡同樣不需要寫死 booking。
     createRegisterView(pending.email, () => {
-      currentView = 'booking';
       renderApp();
     }),
   );
@@ -320,6 +379,9 @@ function renderBlocked() {
 }
 
 async function start() {
+  // 網址說了算。值可能是舊的、拼錯的、或這個人沒權限的，一律交給
+  // renderApp() 去退——這裡不先驗證，驗證只留一個地方。
+  currentView = viewRoute.toKey(readRoute().view) || 'booking';
   clear(app);
   app.append(el('div', { class: 'loading' }, '載入中…'));
   const user = await refreshStatus();
@@ -328,6 +390,17 @@ async function start() {
   else if (getBlockedStatus()) renderBlocked();
   else renderLogin();
 }
+
+// 上一頁／下一頁。
+//
+// ★ 沒登入的時候只更新 currentView，不重畫。沒登入時畫面是由登入狀態決定
+//   的（登入／註冊／停權），不是由 view 決定——這裡照樣呼叫 renderApp()
+//   的話，會把預約畫面畫給一個還沒登入的人看。等他登入完再照 currentView
+//   落地就好。
+onRouteChange(({ view }) => {
+  currentView = viewRoute.toKey(view) || 'booking';
+  if (getUser()) renderApp();
+});
 
 setUnauthorizedHandler(() => {
   toast('登入已過期，請重新登入', { error: true });

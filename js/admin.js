@@ -9,7 +9,9 @@
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
 import { adminMaySave } from './conflicts.js';
-import { showHosts } from './hosts-dialog.js';
+import { showGms } from './gms-dialog.js';
+import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
+         STATUS_SLUG } from './route.js';
 
 const SECTIONS = [
   { key: 'mmg', label: '劇本管理' },
@@ -17,6 +19,17 @@ const SECTIONS = [
   { key: 'users', label: '使用者管理' },
   { key: 'abuse', label: '異常紀錄' },
 ];
+
+// 四個節的網址名稱。key 是純前端的（loadSection 用 if/else 比對，沒有進
+// API 路徑），所以本來就可以自由取名；表寫出來是為了讓「新增第五節而忘了
+// 給網址名稱」在載入時就爆掉。
+const SECTION_SLUG = { mmg: 'mmg', bookings: 'bookings', users: 'users', abuse: 'abuse' };
+assertSlugs('管理員介面', SECTION_SLUG, SECTIONS.map((s) => s.key));
+const sectionRoute = slugs(SECTION_SLUG);
+
+// 場次管理底下的子頁籤 = 五個 status，網址名稱與玩家的「我預定的場次」
+// 共用同一份——同一個狀態在兩個畫面上不該有兩個網址名字。
+const subRoute = slugs(STATUS_SLUG);
 
 // abuse_log.kind 的中文。後端存英文常數（那是程式在比對的東西），
 // 顯示的字放前端——改文案不該動到判斷邏輯。
@@ -121,19 +134,28 @@ const EMPTY_BOOKING_FILTERS = {
   mmg_name: '', player_name: '', session_date: '', session_time: '',
 };
 
-export function createAdminView() {
+/**
+ * initialSection 來自網址（?view=admin&tab=）。五封通知信裡有**三封**
+ * 指向這裡的非預設節：場次管理、異常紀錄、使用者管理。
+ */
+export function createAdminView({ tab, sub } = {}) {
   const root = el('div', { class: 'view' });
 
+  // ★ sub 要在這裡先讀走。底下 setRouteTab() 會把網址上的 sub 清掉（換頁籤
+  //   本來就該清），所以晚一步再讀就讀不到了。
+  const initialSub = subRoute.toKey(sub);
+
   const state = {
-    section: 'mmg',
-    mmg: { items: [], hostCandidates: [], rooms: [], loading: true, editing: null, search: '' },
+    section: sectionRoute.toKey(tab) ?? 'mmg',
+    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, search: '' },
     users: { items: [], loading: true, editing: null, search: '' },
     abuse: { items: [], has_more: false, start: 1, loading: true, meta: {} },
     bookings: {
       tabs: {},           // 後端給的 {key: 中文標籤}
       tabOrder: [],
-      tab: null,
+      tab: initialSub,    // 網址指定的子頁籤，載到清單之後才驗得了
       data: {},           // {key: {items, has_more, start, filters, loading}}
+      gap: null,          // 網址名稱表沒蓋到某個子頁籤時要顯示的話
       editing: null,
       filterOpen: false,
       draft: { ...EMPTY_BOOKING_FILTERS },
@@ -148,7 +170,7 @@ export function createAdminView() {
     try {
       const d = await api.get('/api/admin/mmg');
       state.mmg.items = d.items;
-      state.mmg.hostCandidates = d.host_candidates;
+      state.mmg.gmCandidates = d.gm_candidates;
       state.mmg.rooms = d.rooms ?? [];
     } catch (err) { toast(err.message, { error: true }); }
     state.mmg.loading = false;
@@ -189,7 +211,13 @@ export function createAdminView() {
       const d = await api.get('/api/admin/bookings');
       b.tabs = d.tabs;
       b.tabOrder = Object.keys(d.tabs);
-      b.tab = b.tab ?? b.tabOrder[0];
+      // 子頁籤清單是後端給的，完整性只能在這裡檢查。
+      b.gap = slugGap('管理員／場次管理', STATUS_SLUG, b.tabOrder);
+      // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個。
+      // ★ 一定要對 tabOrder 驗一次：b.tab 直接來自網址，指到一個不存在的
+      //   子頁籤時底下 b.data[b.tab] 會是 undefined，畫面會整個炸掉。
+      b.tab = b.tabOrder.includes(b.tab) ? b.tab : b.tabOrder[0];
+      setRouteSub('admin', subRoute.toSlug(b.tab));
       for (const key of b.tabOrder) {
         b.data[key] = {
           ...d.data[key], start: 1,
@@ -216,6 +244,7 @@ export function createAdminView() {
 
   function loadSection(key) {
     state.section = key;
+    setRouteTab('admin', sectionRoute.toSlug(key));
     if (key === 'mmg') loadMmg();
     else if (key === 'users') loadUsers();
     else if (key === 'abuse') loadAbuse();
@@ -664,7 +693,7 @@ export function createAdminView() {
   /** 一個主持人角色：名稱 + 已加入的人（標籤，可移除）+ 新增下拉。 */
   function renderGmSlot(m, slot, index) {
     const hasName = Boolean((slot.name ?? '').trim());
-    const candidates = state.mmg.hostCandidates.filter((c) => !slot.user_ids.includes(c.id));
+    const candidates = state.mmg.gmCandidates.filter((c) => !slot.user_ids.includes(c.id));
 
     return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:8px' }, [
       field({
@@ -693,7 +722,7 @@ export function createAdminView() {
       }),
       hasName && el('div', { class: 'tag-row' }, [
         ...slot.user_ids.map((uid) => {
-          const person = state.mmg.hostCandidates.find((c) => c.id === uid);
+          const person = state.mmg.gmCandidates.find((c) => c.id === uid);
           return el('div', { class: 'tag' }, [
             person ? person.name : `id=${uid}`,
             el('button', {
@@ -867,14 +896,19 @@ export function createAdminView() {
       el('div', { class: 'tabs' }, b.tabOrder.map((key) =>
         el('button', {
           class: `tab${key === b.tab ? ' tab--active' : ''}`,
-          onClick: () => { b.tab = key; b.draft = { ...t.filters }; render(); },
+          onClick: () => {
+            b.tab = key;
+            setRouteSub('admin', subRoute.toSlug(key));
+            b.draft = { ...t.filters };
+            render();
+          },
         }, b.tabs[key]),
       )),
       el('div', { class: 'section toolbar' }, [
         el('button', {
           class: 'btn btn--ghost btn--small',
           // 收起 = 不篩了。條件留著卻把清除按鈕藏進收合的面板裡，
-          // 使用者就沒有路回到完整清單了（見 host.js 的同一段說明）。
+          // 使用者就沒有路回到完整清單了（見 gm.js 的同一段說明）。
           onClick: () => {
             const closing = b.filterOpen;
             b.filterOpen = !b.filterOpen;
@@ -900,6 +934,8 @@ export function createAdminView() {
         }, '＋ 新增場次'),
       ]),
     ];
+
+    if (b.gap) nodes.push(slugGapNode(b.gap));
 
     if (b.filterOpen) {
       const set = (k) => (e) => { b.draft[k] = e.target.value; };
@@ -934,7 +970,7 @@ export function createAdminView() {
             `${item.session_date} ${item.session_time} · ${item.player_name} · `,
             // 只寫「主持」而不列人名：一場最多四個角色，列出來會把這一行
             // 撐爆，而且真正要看的是「確認了沒」，那在對話框裡。
-            asyncLink('主持', () => showHosts(item.id)),
+            asyncLink('主持', () => showGms(item.id)),
           ]),
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),
@@ -1053,7 +1089,7 @@ export function createAdminView() {
       el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人'),
       ...(mmg?.gm_slots ?? []).map((slot, i) => {
         if (!slot.name) return null;
-        const candidates = state.mmg.hostCandidates.filter((c) => slot.user_ids.includes(c.id));
+        const candidates = state.mmg.gmCandidates.filter((c) => slot.user_ids.includes(c.id));
         return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:8px' }, [
           field({
             label: slot.name,
@@ -1303,8 +1339,17 @@ export function createAdminView() {
     }
   }
 
-  // 場次編輯要用到劇本的角色定義，所以一開始就把劇本也載進來
+  // 場次編輯要用到劇本的角色定義，所以一開始就把劇本也載進來。
+  //
+  // ★ 這一行跟「初始停在哪一節」無關，**兩種情況都要跑**。從網址直接進
+  //   場次管理時它一樣是必要的：renderBookingEditor() 讀 state.mmg.items
+  //   與 gmCandidates，沒載的話那些下拉會是空的、主持人欄位會整排消失，
+  //   而且不會有任何錯誤——只是「編輯畫面少了一半」，沒有人會發現。
   loadMmg();
+  // loadSection('mmg') 會再打一次 loadMmg()，所以預設那一節只寫網址、
+  // 不重複呼叫。
+  if (state.section === 'mmg') setRouteTab('admin', sectionRoute.toSlug('mmg'));
+  else loadSection(state.section);
   return root;
 }
 

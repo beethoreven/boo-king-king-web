@@ -11,7 +11,7 @@ import { api } from './api.js';
 import { alertDialog, toast } from './ui.js';
 
 /** 開啟某一筆預約的主持人明細。失敗時只跳 toast，不留下半開的對話框。 */
-export async function showHosts(bookingId) {
+export async function showGms(bookingId) {
   try {
     const d = await api.get(`/api/bookings/${bookingId}/detail`);
     const lines = d.gm_slots.map((s) => {

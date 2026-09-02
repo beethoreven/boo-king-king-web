@@ -26,7 +26,7 @@ import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl } from
 import { getUser } from './auth.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
-const EMPTY_HOSTS = [null, null, null, null];
+const EMPTY_GMS = [null, null, null, null];
 
 // 時與分的下拉選項。分只給整點與半點——場次時間是以半小時為單位的約定，
 // 給 60 個選項只會讓人多滑。想打其他分鐘數的，用下面那排手動欄位。
@@ -205,13 +205,13 @@ export function createBookingView() {
 
   // 主持人。角色的數量與名稱只在換劇本時才變，所以只有換劇本才重建這一段；
   // 選了人之後只更新既有節點的值與錯誤文字，不重畫。
-  const hostList = el('div', { class: 'list' });
-  const hostSection = el('div', { class: 'section' }, [
+  const gmList = el('div', { class: 'list' });
+  const gmSection = el('div', { class: 'section' }, [
     el('div', { class: 'section__label' }, '選擇主持人'),
-    hostList,
+    gmList,
   ]);
-  let hostRows = [];          // [{ wrap, sel, errNode }]
-  let hostRowsBuiltFor = null; // 已經照哪一個 mmg id 建過
+  let gmRows = [];          // [{ wrap, sel, errNode }]
+  let gmRowsBuiltFor = null; // 已經照哪一個 mmg id 建過
 
   const submitBtn = el('button', { class: 'btn btn--primary', onClick: submit }, '立即預約');
   const submitSection = el('div', { class: 'section', style: 'padding-bottom: 20px' }, [submitBtn]);
@@ -222,7 +222,7 @@ export function createBookingView() {
   const loadingNode = spinner();
 
   root.append(
-    loadingNode, scriptSection, tagSection, slotSection, hostSection,
+    loadingNode, scriptSection, tagSection, slotSection, gmSection,
     el('div', { class: 'spacer' }), submitSection,
   );
 
@@ -235,15 +235,15 @@ export function createBookingView() {
     // 日期時間的真正來源是下排那五個欄位，state 只是它們的鏡像。
     // 存字串不存數字：使用者可能只打了一半（"20"），那不是 20 年。
     y: '', mo: '', d: '', h: '', mi: '',
-    hosts: [...EMPTY_HOSTS],
-    hostErrors: [null, null, null, null],
+    gms: [...EMPTY_GMS],
+    gmErrors: [null, null, null, null],
     // 已經驗證過的主持人選擇，避免重選同一個值又打一次 API。
     // key 是 `${slot}:${userId}`，值是錯誤訊息或 null（代表驗證過沒問題）。
     //
     // ★ 鍵裡刻意不含時段——因為換時段時整份快取會被丟掉（見
     //   checkedSlot）。若哪天改成保留跨時段的結果，鍵就必須帶上時段，
     //   否則「A 主持人在 10:00 撞期」會被誤用到 14:00 上。
-    hostChecked: new Map(),
+    gmChecked: new Map(),
     // 這份主持人檢查是針對哪一個時段做的。時段一換，先前的結果就不再
     // 適用：撞期是「這個人在這段時間有沒有別的場」，換了時間答案可能
     // 完全相反。
@@ -381,21 +381,21 @@ export function createBookingView() {
    * 而使用者換時間之後本來就常常會換人。讓他重選一次，每一次選擇都是
    * 對「現在這個時段」問的，不會有過期的答案。
    */
-  function resetHostsForNewSlot() {
+  function resetGmsForNewSlot() {
     const key = currentDate() && currentTime() ? `${currentDate()} ${currentTime()}` : '';
     if (!key || key === state.checkedSlot) return false;
     state.checkedSlot = key;
 
-    const had = state.hosts.some((h) => h !== null);
-    state.hosts = [...EMPTY_HOSTS];
-    state.hostErrors = [null, null, null, null];
-    state.hostChecked.clear();
+    const had = state.gms.some((h) => h !== null);
+    state.gms = [...EMPTY_GMS];
+    state.gmErrors = [null, null, null, null];
+    state.gmChecked.clear();
     return had;
   }
 
   /** 日期時間齊全就去查該時段的排隊狀況。 */
   async function refreshSlot() {
-    if (resetHostsForNewSlot()) {
+    if (resetGmsForNewSlot()) {
       toast('時段已變更，請重新選擇主持人');
     }
     syncHints();
@@ -443,9 +443,9 @@ export function createBookingView() {
     calendar.reset();
     hourPicker.value = '';
     minutePicker.value = '';
-    state.hosts = [...EMPTY_HOSTS];
-    state.hostErrors = [null, null, null, null];
-    state.hostChecked.clear();
+    state.gms = [...EMPTY_GMS];
+    state.gmErrors = [null, null, null, null];
+    state.gmChecked.clear();
     state.checkedSlot = '';
     state.slot = null;
   }
@@ -609,16 +609,16 @@ export function createBookingView() {
 
   // ── 主持人 ──────────────────────────────────────────────────
 
-  function buildHostRows(d) {
-    clear(hostList);
-    hostRows = [];
+  function buildGmRows(d) {
+    clear(gmList);
+    gmRows = [];
     for (const gm of d.gm_slots) {
       const sel = el('select', {
         'aria-label': `選擇「${gm.name}」的主持人`,
-        onChange: (e) => pickHost(gm.slot - 1, e.target.value),
+        onChange: (e) => pickGm(gm.slot - 1, e.target.value),
       });
       sel.append(el('option', { value: '' }, '未選擇'));
-      for (const h of gm.hosts) sel.append(el('option', { value: h.id }, h.name));
+      for (const h of gm.gms) sel.append(el('option', { value: h.id }, h.name));
 
       const errNode = el('div', { class: 'field__error' });
       const wrap = el('div', { class: 'field' }, [
@@ -626,27 +626,27 @@ export function createBookingView() {
         el('div', { class: 'select-wrap' }, sel),
         errNode,
       ]);
-      hostList.append(wrap);
-      hostRows.push({ wrap, sel, errNode, slotIndex: gm.slot - 1 });
+      gmList.append(wrap);
+      gmRows.push({ wrap, sel, errNode, slotIndex: gm.slot - 1 });
     }
-    hostRowsBuiltFor = d.id;
+    gmRowsBuiltFor = d.id;
   }
 
-  async function pickHost(slotIndex, value) {
+  async function pickGm(slotIndex, value) {
     const userId = value ? Number(value) : null;
     state.requestId = null;
-    state.hosts[slotIndex] = userId;
+    state.gms[slotIndex] = userId;
 
     if (userId === null) {
-      state.hostErrors[slotIndex] = null;
+      state.gmErrors[slotIndex] = null;
       render();
       return;
     }
 
     // 重複指派同一個人：純字串比對，不用打 API
-    const duplicateAt = state.hosts.findIndex((h, i) => i !== slotIndex && h === userId);
+    const duplicateAt = state.gms.findIndex((h, i) => i !== slotIndex && h === userId);
     if (duplicateAt !== -1) {
-      state.hostErrors[slotIndex] = '請選擇不同的主持人';
+      state.gmErrors[slotIndex] = '請選擇不同的主持人';
       toast('請選擇不同的主持人', { error: true });
       render();
       return;
@@ -654,9 +654,9 @@ export function createBookingView() {
 
     // 這個選擇先前驗證過就直接沿用結果，不重打 API
     const key = `${slotIndex}:${userId}`;
-    if (state.hostChecked.has(key)) {
-      const cached = state.hostChecked.get(key);
-      state.hostErrors[slotIndex] = cached;
+    if (state.gmChecked.has(key)) {
+      const cached = state.gmChecked.get(key);
+      state.gmErrors[slotIndex] = cached;
       if (cached) toast(cached, { error: true });
       render();
       return;
@@ -666,24 +666,24 @@ export function createBookingView() {
     const date = currentDate();
     const time = currentTime();
     if (!date || !time) {
-      state.hostErrors[slotIndex] = null;
+      state.gmErrors[slotIndex] = null;
       render();
       return;
     }
 
     try {
-      await api.get('/api/bookings/check-host', {
+      await api.get('/api/bookings/check-gm', {
         mmg_id: state.mmgId,
         session_date: date,
         session_time: time,
         user_id: userId,
       });
-      state.hostChecked.set(key, null);
-      state.hostErrors[slotIndex] = null;
+      state.gmChecked.set(key, null);
+      state.gmErrors[slotIndex] = null;
     } catch (err) {
       const message = err instanceof ApiError ? err.message : '主持人檢查失敗';
-      state.hostChecked.set(key, message);
-      state.hostErrors[slotIndex] = message;
+      state.gmChecked.set(key, message);
+      state.gmErrors[slotIndex] = message;
       toast(message, { error: true });
     }
     render();
@@ -710,11 +710,11 @@ export function createBookingView() {
     if (state.slot?.is_full) problems.push('本時段已額滿');
 
     for (const gm of state.detail?.gm_slots ?? []) {
-      if (state.hosts[gm.slot - 1] === null) {
+      if (state.gms[gm.slot - 1] === null) {
         problems.push(`「${gm.name}」尚未選擇主持人`);
       }
     }
-    for (const err of state.hostErrors) {
+    for (const err of state.gmErrors) {
       if (err) problems.push(err);
     }
     return problems;
@@ -756,7 +756,7 @@ export function createBookingView() {
       //   但「同一次意圖」不是「同一個 state 物件」——只要使用者在這之間
       //   改了日期、時間或主持人，那就是另一筆預約，絕不能沿用舊的 id，
       //   不然會被後端的 ON CONFLICT 誤判成同一筆，回傳/鎖住的是改之前
-      //   那個時段。所以 requestId 只存在這裡：readManualFields／pickHost／
+      //   那個時段。所以 requestId 只存在這裡：readManualFields／pickGm／
       //   resetBelowScript 任何一個都會先把它清成 null，逼這裡重新產生一組；
       //   只有「什麼都沒改、單純重按送出」才會沿用。
       if (!state.requestId) state.requestId = crypto.randomUUID();
@@ -764,7 +764,7 @@ export function createBookingView() {
         mmg_id: Number(state.mmgId),
         session_date: date,
         session_time: time,
-        gm_user_ids: state.hosts,
+        gm_user_ids: state.gms,
         request_id: state.requestId,
       });
       toast(result.already_existed ? '這筆預約先前已經成立' : `預約成功（${result.label}）`);
@@ -809,7 +809,7 @@ export function createBookingView() {
     if (state.loading) {
       tagSection.hidden = true;
       slotSection.hidden = true;
-      hostSection.hidden = true;
+      gmSection.hidden = true;
       submitSection.hidden = true;
       return;
     }
@@ -821,7 +821,7 @@ export function createBookingView() {
     tagSection.hidden = !show;
     slotSection.hidden = !show;
     submitSection.hidden = !show;
-    hostSection.hidden = !show || !d.gm_slots.length;
+    gmSection.hidden = !show || !d.gm_slots.length;
     if (!show) return;
 
     clear(tagRow);
@@ -847,11 +847,11 @@ export function createBookingView() {
 
     syncHints();
 
-    if (d.gm_slots.length && hostRowsBuiltFor !== d.id) buildHostRows(d);
-    for (const row of hostRows) {
-      const value = state.hosts[row.slotIndex] ?? '';
+    if (d.gm_slots.length && gmRowsBuiltFor !== d.id) buildGmRows(d);
+    for (const row of gmRows) {
+      const value = state.gms[row.slotIndex] ?? '';
       if (row.sel.value !== String(value)) row.sel.value = value;
-      const err = state.hostErrors[row.slotIndex];
+      const err = state.gmErrors[row.slotIndex];
       row.errNode.textContent = err ?? '';
       row.errNode.hidden = !err;
       row.wrap.className = `field${err ? ' field--error' : ''}`;

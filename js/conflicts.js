@@ -71,11 +71,11 @@ function roomConflictDialog(room, { tail, confirmText }) {
  * 先擋自己撞期（不能放行），再問劇本撞期（可以放行）——被擋下來的時候
  * 就不必再問後面那個了，反正這一場他接不了。
  */
-export async function hostMayConfirm(bookingId) {
+export async function gmMayConfirm(bookingId) {
   const data = await fetchConflicts(bookingId);
   if (!data) return true;
 
-  const mine = data.hosts.filter((c) => c.is_me);
+  const mine = data.gms.filter((c) => c.is_me);
   if (mine.length) {
     await blockDialog('你有衝突場次', mine,
       '該場次未取消前你不能確認衝突場次，請通知管理員處理');
@@ -124,11 +124,11 @@ export async function adminMaySave(bookingId) {
 
   // 全部被指派的主持人都要查，不是只查這次動到的那一個——管理員可能
   // 一次改好幾格，只講其中一個會讓他改完再撞一次。
-  if (data.hosts.length) {
-    const names = [...new Set(data.hosts.map((c) => c.host_name))];
+  if (data.gms.length) {
+    const names = [...new Set(data.gms.map((c) => c.gm_name))];
     await blockDialog(
       `${names.join('、')}有衝突場次`,
-      data.hosts.map((c) => ({ ...c, mmg_name: `${c.host_name}：${c.mmg_name}` })),
+      data.gms.map((c) => ({ ...c, mmg_name: `${c.gm_name}：${c.mmg_name}` })),
       '該場次未取消前你不能確認衝突指定，請確認何者為正式場次',
     );
     return false;

@@ -1,15 +1,16 @@
 /**
  * 主持人介面：三個頁籤（待確認／已確認／已結束）。
  *
- * 分頁與篩選都只作用於當前頁籤——初次載入打一支 /api/host/dashboard
- * 拿三包的第一頁，之後翻頁或篩選只針對當前頁籤打 /api/host/tab/<tab>，
+ * 分頁與篩選都只作用於當前頁籤——初次載入打一支 /api/gm/dashboard
+ * 拿三包的第一頁，之後翻頁或篩選只針對當前頁籤打 /api/gm/tab/<tab>，
  * 另外兩包維持畫面上既有的內容不動。
  */
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
-import { hostMayConfirm } from './conflicts.js';
-import { showHosts } from './hosts-dialog.js';
+import { gmMayConfirm } from './conflicts.js';
+import { setRouteTab, slugs, assertSlugs } from './route.js';
+import { showGms } from './gms-dialog.js';
 
 const TABS = [
   { key: 'pending', label: '待確認場次' },
@@ -17,25 +18,34 @@ const TABS = [
   { key: 'ended', label: '已結束場次' },
 ];
 
-// 「狀態」篩選只對已確認頁籤有意義：待確認永遠是 gm_confirm、
-// 已結束永遠是 ended，對它們篩狀態等於沒篩。
-const STATUS_OPTIONS = [
-  { value: '', label: '全部' },
-  { value: 'gm_confirm', label: '等待其他主持確認' },
-  { value: 'gm_reviewed', label: '等待訂金支付' },
-  { value: 'booked', label: '場次已預約完成' },
-];
+// 頁籤的網址名稱。這三個本來就是好讀的英文，網址值與 key 相同——但表還是
+// 要寫出來：之後多一個頁籤而忘了給它網址名稱時，下面那行會讓模組載不起來，
+// 而不是安靜地讓那個頁籤變成「連結分享不出去」。
+const TAB_SLUG = { pending: 'pending', confirmed: 'confirmed', ended: 'ended' };
+assertSlugs('主持人介面', TAB_SLUG, TABS.map((t) => t.key));
+const tabRoute = slugs(TAB_SLUG);
+
+// 狀態篩選的選項**由後端跟著 dashboard 一起回**（db/bookings.py 的
+// GM_FILTER_STATUSES）。這裡原本硬寫一份，結果同一個狀態在下拉裡叫
+// 「等待訂金支付」、在清單列裡叫「等待支付訂金」——兩份各改各的，沒人發現。
+//
+// 「全部」留在前端：它不是一個狀態，是「不要篩」。
 
 const EMPTY_FILTERS = {
   mmg_name: '', player_name: '', role_name: '',
   session_date: '', session_time: '', status: '',
 };
 
-export function createHostView() {
+/**
+ * tab 來自網址（?view=gm&tab=）。指定通知那封信會帶 pending
+ * 進來——那剛好也是預設值，但**不能因此就不接這個參數**：那是巧合，
+ * 之後改了預設頁籤，信就會安靜地落錯地方。
+ */
+export function createGmView({ tab } = {}) {
   const root = el('div', { class: 'view' });
 
   const state = {
-    tab: 'pending',
+    tab: tabRoute.toKey(tab) ?? 'pending',
     // 每個頁籤各自記住自己的資料、頁碼與篩選條件
     tabs: Object.fromEntries(TABS.map((t) => [
       t.key,
@@ -45,6 +55,9 @@ export function createHostView() {
         loading: true, stale: false },
     ])),
     filterOpen: false,
+    // 後端回的狀態選項。還沒載到之前是空的，篩選器就只有「全部」——
+    // 那時候三個頁籤也都還在載入中，沒有東西可以篩。
+    statusOptions: [],
     // 篩選器輸入中的暫存值。按下「篩選」才寫進 tabs[x].filters 並打 API——
     // 每改一格就送出會產生大量沒必要的請求。
     draft: { ...EMPTY_FILTERS },
@@ -52,10 +65,11 @@ export function createHostView() {
 
   async function loadAll() {
     try {
-      const data = await api.get('/api/host/dashboard');
+      const data = await api.get('/api/gm/dashboard');
       for (const t of TABS) {
         Object.assign(state.tabs[t.key], data[t.key], { loading: false });
       }
+      state.statusOptions = data.status_options ?? [];
     } catch (err) {
       toast(err.message, { error: true });
       for (const t of TABS) state.tabs[t.key].loading = false;
@@ -69,7 +83,7 @@ export function createHostView() {
     tab.loading = true;
     render();
     try {
-      const data = await api.get(`/api/host/tab/${key}`, {
+      const data = await api.get(`/api/gm/tab/${key}`, {
         start: tab.start,
         ...tab.filters,
       });
@@ -119,6 +133,7 @@ export function createHostView() {
 
   function switchTab(key) {
     state.tab = key;
+    setRouteTab('gm', tabRoute.toSlug(key));
     // 篩選條件是各頁籤自己的，切過去時把草稿同步成該頁籤目前生效的條件
     state.draft = { ...state.tabs[key].filters };
     // 被標記過期的才重抓。這是「確認場次」之後那一包會走的路：
@@ -159,7 +174,7 @@ export function createHostView() {
 
     // 撞期檢查排在同意之後、送出之前，讓「依然確認」按下去就是真的送出，
     // 中間不再多問一次。自己撞期會直接擋下來（見 conflicts.js）。
-    if (!await hostMayConfirm(item.id)) return;
+    if (!await gmMayConfirm(item.id)) return;
 
     try {
       await api.post(`/api/bookings/${item.id}/confirm`);
@@ -213,7 +228,7 @@ export function createHostView() {
         showStatus && field({
           label: '狀態',
           control: select({
-            options: STATUS_OPTIONS,
+            options: [{ value: '', label: '全部' }, ...state.statusOptions],
             value: state.draft.status,
             onChange: (v) => { state.draft.status = v; },
             ariaLabel: '篩選狀態',
@@ -236,7 +251,7 @@ export function createHostView() {
           // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
           // 時最需要一眼看到的——「這場我是誰」比「預定者是誰」先要緊。
           item.role_name && el('span', { class: 'sep' }, '·'),
-          item.role_name && asyncLink(item.role_name, () => showHosts(item.id)),
+          item.role_name && asyncLink(item.role_name, () => showGms(item.id)),
         ].filter(Boolean)),
         el('div', { class: 'list-item__meta' }, [
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
@@ -314,6 +329,9 @@ export function createHostView() {
     if (pager) root.append(el('div', { class: 'section' }, pager));
   }
 
+  // 網址帶了無效的頁籤（舊連結、拼錯）時，pickTab 已經退回 pending 了，
+  // 這裡把網址一起改正——否則網址會停在一個跟畫面對不起來的值上。
+  setRouteTab('gm', tabRoute.toSlug(state.tab));
   // 先畫一次再去要資料。少了這一行，root 會在整個載入期間是空的——
   // 使用者看到的是一片空白，分不出「還在載」與「真的沒東西」。
   render();
