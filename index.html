@@ -13,8 +13,12 @@
 
   <script>
     // 部署時填入。本機開發可以改用網址參數覆寫：
-    //   ?apiBase=http://localhost:5001&googleClientId=xxx
-    window.__BOO_KING_KING_API_BASE__ = 'https://boo-king-king-tutor-arthur.onrender.com';
+    //   ?apiBase=http://localhost:5001/v/tutor-arthur&googleClientId=xxx
+    //
+    // ★ 這個檔案是「每家店不一樣」的那一份設定。每店一條 branch，差異
+    //   就只有這幾行——主機、部署識別、Google client id。
+    window.__BOO_KING_KING_API_HOST__ = 'https://boo-king-king-tutor-arthur.onrender.com';
+    window.__BOO_KING_KING_VARIANT__ = 'tutor-arthur';
     window.__GOOGLE_CLIENT_ID__ = '903554149397-i8l9mfpn86m3352i49472rn6fj39f0kg.apps.googleusercontent.com';
   </script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>

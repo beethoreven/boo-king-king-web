@@ -28,10 +28,21 @@ const IS_LOCAL = HOST === 'localhost' || HOST === '127.0.0.1' || HOST === '[::1]
 //
 // zh-cn-to-tw 的對應邏輯要處理「同源 / GitHub Pages / 桌面版」三種情況，
 // 這裡只有「靜態託管前端 + Render 後端」一種，所以簡化成這樣。
+// 部署識別。後端的網址形狀是 /v/<variant>/api/...，前綴放在所有路徑最前面
+// ——因為呼叫端有 /api/... 與 /auth/... 兩種，前綴放最前面才涵蓋得到兩者，
+// 而且四十幾個呼叫點完全不用改，只要這裡把它接在 base 後面。
+//
+// ★ 後端那一段是**斷言**：對不上會回 404「打錯服務了」，防的是這一行填錯。
+//   它不是後端用來決定連哪個資料庫的依據——那是後端自己的環境變數。
+const VARIANT = window.__BOO_KING_KING_VARIANT__ ?? '';
+const PREFIX = VARIANT ? `/v/${VARIANT}` : '';
+
+// ★ 本機那一段也要帶前綴。後端目前為了讓 cron-job.org 有時間改設定，暫時
+//   還接受不帶前綴的舊路徑；那個放行一收掉，沒帶前綴的本機開發就會全部 404。
 const API_BASE =
   new URLSearchParams(window.location.search).get('apiBase') ??
-  (IS_LOCAL ? 'http://localhost:5001' : null) ??
-  window.__BOO_KING_KING_API_BASE__ ??
+  (IS_LOCAL ? `http://localhost:5001${PREFIX}` : null) ??
+  (window.__BOO_KING_KING_API_HOST__ ? window.__BOO_KING_KING_API_HOST__ + PREFIX : null) ??
   '';
 
 const TOKEN_KEY = 'boo_king_king_session';
