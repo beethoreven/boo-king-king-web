@@ -1,4 +1,4 @@
-# booking-king-web
+# boo-king-king-web
 
 劇本殺預約系統前端。純靜態站：原生 ES modules，沒有框架、沒有 build step，
 改完存檔重新整理就生效。
@@ -15,7 +15,7 @@ python3 -m http.server 5173
 本機開發時後端在 5001、前端在 5173，不覆寫的話請求會打到 5173 自己身上，
 症狀是登入畫面卡住或整排 404——看起來像登入壞了，其實是打錯位址。
 
-後端要另外起，見 booking-king-backend 的 README。
+後端要另外起，見 boo-king-king-backend 的 README。
 
 ## 檔案結構
 

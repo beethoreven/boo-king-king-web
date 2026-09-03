@@ -31,10 +31,10 @@ const IS_LOCAL = HOST === 'localhost' || HOST === '127.0.0.1' || HOST === '[::1]
 const API_BASE =
   new URLSearchParams(window.location.search).get('apiBase') ??
   (IS_LOCAL ? 'http://localhost:5001' : null) ??
-  window.__BOOKING_KING_API_BASE__ ??
+  window.__BOO_KING_KING_API_BASE__ ??
   '';
 
-const TOKEN_KEY = 'booking_king_session';
+const TOKEN_KEY = 'boo_king_king_session';
 
 // 網址加 ?debug=api 打開呼叫計數，正式使用時不會執行到。
 //
