@@ -91,7 +91,7 @@ export async function refreshStatus() {
 }
 
 /** 拿 Google ID token 換我們自己的 session token。 */
-export async function loginWithGoogle(idToken) {
+async function loginWithGoogle(idToken) {
   const result = await api.post('/auth/login', { id_token: idToken });
   setToken(result.session_token);
   // 沒註冊過的人一樣拿到 session——註冊那一步需要一張憑證來證明「填表的

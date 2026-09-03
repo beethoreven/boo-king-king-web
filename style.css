@@ -401,8 +401,6 @@ select option { background: var(--surface); color: var(--ink); }
 .pager__label { font-size: 12px; color: var(--ink-faint); }
 
 /* 已確認的列在畫面上變暗、不可再操作 */
-.list-item--done { opacity: 0.55; }
-
 /* 標籤上的移除鍵（主持人名單） */
 .tag__remove {
   background: none;
