@@ -248,6 +248,64 @@ export function scriptName(name, url, extraClass = '') {
   }, name ?? '');
 }
 
+/**
+ * 平日／假日兩個金額合成一段顯示字串。售價與訂金共用，所以放這裡。
+ *
+ *   兩個一樣 → 「NT$ 1000」（跟只有一種價錢時長得一模一樣）
+ *   只填一個 → 就顯示那一個，不標平假日
+ *   兩個不同 → 「平日 NT$ 1000／假日 NT$ 1200」
+ *   都沒填   → null，呼叫端決定要不要畫
+ *
+ * ★ 「一樣就只顯示一個」是步經徑遷移後畫面完全不變的原因：既有劇本的
+ *   假日金額是從平日複製過去的。
+ *
+ * 兩個之間用「／」不用「·」：劇本管理的清單已經用「·」隔開售價與訂金，
+ * 同一行裡兩種意思共用一個符號，就分不出哪個數字屬於哪一組。
+ *
+ * prefix 預設「NT$ 」。劇本管理清單的訂金原本就不帶 NT$（「訂金 1000」），
+ * 傳空字串讓它維持原樣。
+ *
+ * 還沒更新的舊後端沒有 holiday 這個欄位（undefined），走的是「只填一個」
+ * 那條，顯示平日那個數字——正好就是舊版的畫面。
+ */
+export function dualPrice(weekday, holiday, { prefix = 'NT$ ' } = {}) {
+  const w = weekday ?? null;
+  const h = holiday ?? null;
+  if (w == null && h == null) return null;
+  if (w == null) return `${prefix}${h}`;
+  if (h == null || w === h) return `${prefix}${w}`;
+  return `平日 ${prefix}${w}／假日 ${prefix}${h}`;
+}
+
+/** 場次類型的中文。後端 DAY_TYPE_LABEL 加一個「場」字。 */
+export const DAY_TYPE_LABEL = { weekday: '平日場', holiday: '假日場' };
+
+/**
+ * 依日期推場次類型：週六日是假日場，其餘是平日場。跟後端
+ * default_day_type() 同一條規則——國定假日、補班日系統不知道，那是管理員
+ * 在場次管理手動改的。日期不完整就回 null。
+ */
+export function dayTypeOf(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso ?? '')) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  const wd = new Date(y, m - 1, d).getDay();
+  return wd === 0 || wd === 6 ? 'holiday' : 'weekday';
+}
+
+/**
+ * 某齣戲在某個場次類型該收多少訂金。沒設定是 null。
+ *
+ * booking_cost_holiday 是 undefined（舊後端沒有這個欄位）時退回平日訂金：
+ * 那個版本的後端本來就只有一個訂金，拿它來比才是那個版本的真相。
+ */
+export function depositDue(mmg, dayType) {
+  if (!mmg) return null;
+  if (dayType === 'holiday') {
+    return mmg.booking_cost_holiday === undefined ? (mmg.booking_cost ?? null) : mmg.booking_cost_holiday;
+  }
+  return mmg.booking_cost ?? null;
+}
+
 /** 是 http/https 就回傳整理過的網址，否則回傳空字串。 */
 export function isHttpUrl(raw) {
   const text = (raw ?? '').trim();

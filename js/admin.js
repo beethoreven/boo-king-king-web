@@ -7,7 +7,8 @@
  */
 
 import { api } from './api.js';
-import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink} from './ui.js';
+import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink,
+         dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
 import { adminMaySave } from './conflicts.js';
 import { showGms } from './gms-dialog.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
@@ -97,7 +98,8 @@ const BOOKING_STATUS_OPTIONS = [
 // 新增時的空白資料。用函式而不是常數，因為裡面有陣列——共用同一個物件
 // 會讓上一次沒存檔的編輯殘留到下一次新增。
 const emptyMmg = () => ({
-  id: null, name: '', url: '', period: null, price: null, booking_cost: null,
+  id: null, name: '', url: '', period: null,
+  price: null, price_holiday: null, booking_cost: null, booking_cost_holiday: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
   players: '', waitlist_limit: 3, status: 'active', room_id: 1,
   // 新劇本預設此刻上架。上架是一個明確的時刻，不只是日期。
@@ -124,7 +126,8 @@ const emptyUser = () => ({
 
 const emptyBooking = () => ({
   id: null, mmg_id: null, player_id: null,
-  session_date: '', session_time: '', status: 'gm_confirm',
+  // day_type 在選了日期之後才推得出來；在那之前是 null，送出去後端會依日期推。
+  session_date: '', session_time: '', day_type: null, status: 'gm_confirm',
   deposit: 0, note: '',
   gm_user_ids: [null, null, null, null],
   gm_confirmed: [false, false, false, false],
@@ -403,8 +406,10 @@ export function createAdminView({ tab, sub } = {}) {
           // players 是自由文字，店家已經自己寫了「6人性別不詳」這種完整
           // 描述，後面再補一個「人」就變成「…不詳 人」。
           + ` · ${m.players ?? '—'}`),
+        // 平日假日一樣時長得跟原本一模一樣（「NT$ 1580 · 訂金 1000」）。
         el('div', { class: 'list-item__meta' },
-          `NT$ ${m.price ?? '—'} · 訂金 ${m.booking_cost ?? '—'}`),
+          `${dualPrice(m.price, m.price_holiday) ?? 'NT$ —'}`
+          + ` · 訂金 ${dualPrice(m.booking_cost, m.booking_cost_holiday, { prefix: '' }) ?? '—'}`),
         el('div', { class: 'list-item__meta' },
           m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
       ]),
@@ -444,10 +449,19 @@ export function createAdminView({ tab, sub } = {}) {
       ]),
       el('div', { class: 'field__hint' },
         '包廂被佔用的區間是「開始前的佈置」到「結束後的還原」，衝突判定看的是這一段'),
+      // 左平日、右假日。只有一種價錢的劇本兩格填一樣（或只填其中一格）——
+      // 兩個數字一樣時，其他畫面只會顯示一個。
+      // 訂金空著的那一種日子不能開放：存檔時後端會檢查（0 是免訂金，不是空）。
       el('div', { class: 'row' }, [
-        field({ label: '售價', control: el('input', { type: 'number', value: m.price ?? '', onInput: setNum('price') }) }),
-        field({ label: '訂金', control: el('input', { type: 'number', value: m.booking_cost ?? '', onInput: setNum('booking_cost') }) }),
+        field({ label: '售價（平日）', control: el('input', { type: 'number', min: '0', value: m.price ?? '', onInput: setNum('price') }) }),
+        field({ label: '售價（假日）', control: el('input', { type: 'number', min: '0', value: m.price_holiday ?? '', onInput: setNum('price_holiday') }) }),
       ]),
+      el('div', { class: 'row' }, [
+        field({ label: '訂金（平日）', control: el('input', { type: 'number', min: '0', value: m.booking_cost ?? '', onInput: setNum('booking_cost') }) }),
+        field({ label: '訂金（假日）', control: el('input', { type: 'number', min: '0', value: m.booking_cost_holiday ?? '', onInput: setNum('booking_cost_holiday') }) }),
+      ]),
+      el('div', { class: 'field__hint' },
+        '假日＝週六日。國定假日、補班日在場次管理把那一場的「場次類型」改掉。不收訂金請填 0，留空代表沒設定'),
       el('div', { class: 'row' }, [
         field({ label: '序位上限', control: el('input', { type: 'number', min: '0', value: m.waitlist_limit ?? 3, onInput: setNum('waitlist_limit') }),
           hint: '這個時段最多可以有幾組（含已成立的）' }),
@@ -1093,6 +1107,45 @@ export function createAdminView({ tab, sub } = {}) {
 
     const isNew = !item.id;
 
+    // ── 場次類型與訂金 ──
+    //
+    // 應收訂金看「劇本 × 場次類型」，所以訂金那一格的提示要跟著日期、類型
+    // 一起變。
+    //
+    // ★ 換日期時只換掉這兩格，不重繪整張表單：管理員可能正在用鍵盤打日期，
+    //   而 Chrome 在打年份的途中就會一直觸發 change（0002、0020、0202、2026
+    //   每一個都是合法日期）。整張重繪會把他正在打的那個輸入框換掉。
+    //
+    // 劇本清單沒載到的時候（undefined）就不講應收、也不比對：清單上那一筆
+    // 自己帶的應收是「改類型之前」那一種的金額，配上新的類型標籤會是一句
+    // 錯話。不說比說錯好——清單那一行仍然有後端算好的數字。
+    const due = () => (mmg ? depositDue(mmg, item.day_type) : undefined);
+    const depositField = () => field({
+      label: '訂金',
+      control: el('input', {
+        type: 'number', value: item.deposit ?? 0,
+        // 同樣不在打字途中重繪。下面的 warn（訂金與應收金額的關係）
+        // 依附這個值，改成離開欄位時才更新。
+        onInput: (e) => { item.deposit = Number(e.target.value || 0); },
+        onChange: () => render(),
+      }),
+      warn: depositWarning(item.deposit, due()),
+      hint: dueHint(item.day_type, due()),
+    });
+    const depositBox = el('div', {}, depositField());
+    const refreshDeposit = () => { clear(depositBox); depositBox.append(depositField()); };
+    const dayTypeControl = select({
+      options: [
+        // 新增場次、還沒選日期時沒有類型可言；選了日期就會自動帶上。
+        ...(item.day_type ? [] : [{ value: '', label: '依日期自動判斷' }]),
+        { value: 'weekday', label: DAY_TYPE_LABEL.weekday },
+        { value: 'holiday', label: DAY_TYPE_LABEL.holiday },
+      ],
+      value: item.day_type ?? '',
+      onChange: (v) => { item.day_type = v || null; refreshDeposit(); },
+      ariaLabel: '場次類型',
+    });
+
     return el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, isNew ? '新增場次' : `編輯場次 #${item.id}`),
       // 既有場次的劇本與預定者只顯示不編輯（改這兩者等於變成另一筆預約）；
@@ -1128,10 +1181,29 @@ export function createAdminView({ tab, sub } = {}) {
           ])
         : el('div', { class: 'card card--flat' }, `${item.mmg_name} · ${item.player_name}`),
       el('div', { class: 'row' }, [
-        field({ label: '日期', control: el('input', { type: 'date', value: item.session_date, onChange: (e) => { item.session_date = e.target.value; } }) }),
+        field({
+          label: '日期',
+          control: el('input', {
+            type: 'date', value: item.session_date,
+            onChange: (e) => {
+              item.session_date = e.target.value;
+              // 換了日期就依新日期重推場次類型（週六日＝假日場）。手動改過的
+              // 類型是針對原本那一天的，換一天就不再成立。
+              const t = dayTypeOf(item.session_date);
+              if (t && t !== item.day_type) {
+                item.day_type = t;
+                dayTypeControl.querySelector('select').value = t;
+                refreshDeposit();
+              }
+            },
+          }),
+        }),
         field({ label: '時間', control: el('input', { type: 'time', step: '1800', value: item.session_time, onChange: (e) => { item.session_time = e.target.value; } }) }),
       ]),
       el('div', { class: 'row' }, [
+        // 國定假日、補班日系統不知道，要在這裡手動改。已成立的場次改了類型
+        // 不會退回待收訂金（後端也不會），差額看下面訂金那一格的提示。
+        field({ label: '場次類型', control: dayTypeControl }),
         field({
           label: '狀態',
           // 這裡只記下選擇，所有檢查都留到按儲存時一起做（見下方）。
@@ -1142,18 +1214,8 @@ export function createAdminView({ tab, sub } = {}) {
             ariaLabel: '場次狀態',
           }),
         }),
-        field({
-          label: '訂金',
-          control: el('input', {
-            type: 'number', value: item.deposit ?? 0,
-            // 同樣不在打字途中重繪。下面的 warn（訂金與應收金額的關係）
-            // 依附這個值，改成離開欄位時才更新。
-            onInput: (e) => { item.deposit = Number(e.target.value || 0); },
-            onChange: () => render(),
-          }),
-          warn: depositWarning(item.deposit, item.booking_cost),
-        }),
       ]),
+      depositBox,
       field({ label: '備註', control: el('textarea', { rows: '3', value: item.note ?? '', onInput: (e) => { item.note = e.target.value; } }) }),
 
       el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人'),
@@ -1444,6 +1506,20 @@ function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
 }
 
+/**
+ * 訂金欄位下面那行：這一場該收多少。
+ *
+ * 類型還不知道（新增、沒選日期）或應收算不出來（undefined，劇本清單沒載到）
+ * 就不講。null 才是「這齣戲沒設定」，那要講出來。
+ */
+function dueHint(dayType, due) {
+  const type = DAY_TYPE_LABEL[dayType];
+  if (!type || due === undefined) return '';
+  return due == null
+    ? `這齣戲沒有設定${dayType === 'holiday' ? '假日' : '平日'}訂金`
+    : `應收 NT$ ${due}（${type}）`;
+}
+
 function depositWarning(deposit, cost) {
   if (cost == null || !deposit) return '';
   if (deposit > cost) return '超收訂金';
@@ -1452,7 +1528,10 @@ function depositWarning(deposit, cost) {
 }
 
 function depositLine(item) {
+  // booking_cost 是這一筆的應收（後端依場次類型取好的）。類型寫在前面：
+  // 應收是看它決定的，看到 700 才知道為什麼不是劇本上寫的 500。
+  const type = DAY_TYPE_LABEL[item.day_type];
   const warn = depositWarning(item.deposit, item.booking_cost);
-  const base = `訂金 ${item.deposit} / ${item.booking_cost ?? '—'}`;
+  const base = `${type ? `${type} · ` : ''}訂金 ${item.deposit} / ${item.booking_cost ?? '—'}`;
   return warn ? `${base}（${warn}）` : base;
 }
