@@ -896,7 +896,13 @@ function slotMessage(slot) {
   // 前端拿到細節卻選擇不顯示（那樣打開開發者工具照樣看得到）。
   // 管理員與主持人要處理衝突，他們的畫面有完整資訊。
   if (slot.has_conflict) return '本時段有衝突場次，請改選其他時間';
-  if (slot.is_full) return '本時段已額滿';
+  // 容量 1 的時段沒有排隊這回事：講「已額滿」會讓人以為等別人取消就有機會，
+  // 但這種時段沒有候補，就是被訂走了。後端 create_booking 用同一條規則。
+  if (slot.is_full) {
+    return slot.capacity === 1
+      ? '這個時段已經被預約了，請改選其他時間'
+      : '本時段已額滿';
+  }
   const position = slot.taken + 1;
   if (slot.has_booked) {
     return `本時段已經有排定預約，您將排在第 ${position} 序位，`

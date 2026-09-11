@@ -179,7 +179,13 @@ export function createMyBookingsView({ tab } = {}) {
       el('div', { class: 'list-item__side' }, [
         // 序位只在還沒定案時有意義。已成立就是他的場，講「第 1 序位」
         // 反而讓人以為還在排隊。
-        item.position != null && ['gm_confirm', 'gm_reviewed'].includes(item.status)
+        //
+        // 容量 1 的時段也不顯示：那種時段沒有排隊這回事，「第 1 序位」會讓人
+        // 以為後面還有第 2、第 3。這是從劇本自己的 waitlist_limit 推出來的，
+        // 不是另一個設定——哪天那齣戲放寬到 3，標籤自己就回來了。
+        item.position != null
+          && ['gm_confirm', 'gm_reviewed'].includes(item.status)
+          && item.waitlist_limit !== 1
           ? el('div', { class: 'status-chip' }, `第 ${item.position} 序位`)
           : null,
       ]),
