@@ -133,7 +133,7 @@ a:hover { color: #e0b478; }
 .select-wrap--disabled::after { border-color: var(--ink-disabled); }
 
 select, input[type="text"], input[type="number"], input[type="date"],
-input[type="time"], input[type="email"], textarea {
+input[type="time"], input[type="email"], input[type="url"], textarea {
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
@@ -148,7 +148,7 @@ input[type="time"], input[type="email"], textarea {
 }
 
 input[type="text"], input[type="number"], input[type="email"],
-input[type="date"], input[type="time"], textarea {
+input[type="date"], input[type="time"], input[type="url"], textarea {
   padding-right: 18px;
 }
 
