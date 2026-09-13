@@ -292,19 +292,6 @@ export function dayTypeOf(iso) {
   return wd === 0 || wd === 6 ? 'holiday' : 'weekday';
 }
 
-/**
- * 某齣戲在某個場次類型該收多少訂金。沒設定是 null。
- *
- * booking_cost_holiday 是 undefined（舊後端沒有這個欄位）時退回平日訂金：
- * 那個版本的後端本來就只有一個訂金，拿它來比才是那個版本的真相。
- */
-export function depositDue(mmg, dayType) {
-  if (!mmg) return null;
-  if (dayType === 'holiday') {
-    return mmg.booking_cost_holiday === undefined ? (mmg.booking_cost ?? null) : mmg.booking_cost_holiday;
-  }
-  return mmg.booking_cost ?? null;
-}
 
 /** 是 http/https 就回傳整理過的網址，否則回傳空字串。 */
 export function isHttpUrl(raw) {

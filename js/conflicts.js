@@ -3,9 +3,12 @@
  *
  * 有兩種撞期，嚴重程度不同：
  *
- *   包廂撞期 —— 這齣戲要用的包廂在這段時間已經被別的場次佔著了。包廂
- *     才是實體資源，一次只能開一場——佔著的可能是完全不同的一齣戲。
- *     這是排班問題，人看過之後可以決定放行。
+ *   包廂撞期 —— 這齣戲要用的包廂在這段時間已經被別的場次佔著了。
+ *
+ *     ★ 這家店沒有包廂的概念（functions 表 conflict_room=off），後端不會
+ *       回傳這一種，所以那一段永遠不會執行。**刻意留著**：刪掉的話，哪天
+ *       那個開關被打開，畫面會變成安靜地忽略一種真實的衝突——那比多留
+ *       十行沒跑到的 code 危險得多。
  *
  *   主持人撞期 —— 這位主持人自己在這段時間已經被別的成立場次佔住，不論
  *     是不是同一齣戲。這個不能放行：一個人沒辦法同時待在兩場。要嘛另一
@@ -63,32 +66,6 @@ function roomConflictDialog(room, { tail, confirmText }) {
     confirmText,
     cancelText: '取消',
   });
-}
-
-/**
- * 主持人按確認之前的檢查。回傳 true 代表可以送出。
- *
- * 先擋自己撞期（不能放行），再問劇本撞期（可以放行）——被擋下來的時候
- * 就不必再問後面那個了，反正這一場他接不了。
- */
-export async function gmMayConfirm(bookingId) {
-  const data = await fetchConflicts(bookingId);
-  if (!data) return true;
-
-  const mine = data.gms.filter((c) => c.is_me);
-  if (mine.length) {
-    await blockDialog('你有衝突場次', mine,
-      '該場次未取消前你不能確認衝突場次，請通知管理員處理');
-    return false;
-  }
-
-  if (data.room.length) {
-    return roomConflictDialog(data.room, {
-      tail: '請通知管理員處理',
-      confirmText: '依然確認',
-    });
-  }
-  return true;
 }
 
 /**
