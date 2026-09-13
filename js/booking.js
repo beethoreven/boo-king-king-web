@@ -786,6 +786,12 @@ export function createBookingView() {
       state.mmgId = '';
       state.detail = null;
       scriptSelect.value = '';
+      // ★ 搜尋欄也要清。它跟下拉是同一件事的兩個入口（見 pickScript），
+      //   只清下拉的話畫面會停在「搜尋欄還寫著剛剛那齣戲、底下卻什麼都
+      //   沒有」——看起來像選了劇本但頁面壞掉，而不是「已經訂完了」。
+      searchInput.value = '';
+      clear(searchResults);
+      searchResults.hidden = true;
     } catch (err) {
       // 刻意不清 requestId：失敗可能是請求根本沒送到（例如 failed to
       // fetch），也可能是送到了、寫入成功但回應在路上遺失——兩種都要讓

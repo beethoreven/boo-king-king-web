@@ -152,9 +152,10 @@ export function createAdminView({ tab, sub } = {}) {
 
   const state = {
     section: sectionRoute.toKey(tab) ?? 'mmg',
-    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, search: '',
-           failed: false },
-    users: { items: [], loading: true, editing: null, search: '', failed: false },
+    // editing 是開著的編輯畫面，snapshot 是它剛打開時的樣子（見 openEditor）
+    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, snapshot: null,
+           search: '', failed: false },
+    users: { items: [], loading: true, editing: null, snapshot: null, search: '', failed: false },
     abuse: { items: [], has_more: false, start: 1, loading: true, meta: {},
              failed: false },
     bookings: {
@@ -165,6 +166,7 @@ export function createAdminView({ tab, sub } = {}) {
       gap: null,          // 網址名稱表沒蓋到某個子頁籤時要顯示的話
       failed: false,      // 這一次載入是不是失敗了（≠ 真的沒有場次）
       editing: null,
+      snapshot: null,
       filterOpen: false,
       draft: { ...EMPTY_BOOKING_FILTERS },
     },
@@ -337,6 +339,55 @@ export function createAdminView({ tab, sub } = {}) {
     if (i === -1) items.push(saved); else items[i] = saved;
   }
 
+  // ── 編輯畫面的開與關 ──────────────────────────────────
+  //
+  // 三個頁籤各有自己的編輯畫面（劇本、使用者、場次），共用同一套規則：
+  // 開的時候記下「剛打開的樣子」，要離開的時候拿現在的值跟那份快照比，
+  // 不一樣就先問一次。
+  //
+  // ★ 用整包 JSON 比對，不是每個欄位各記一個「改過了嗎」的旗標。欄位一直
+  //   在增加（這個月就多了四個金額欄位與場次類型），而漏掉一個的症狀是
+  //   「明明改了卻沒被問就關掉」——使用者要到下次打開才發現白改了。
+
+  function openEditor(section, item) {
+    section.editing = item;
+    section.snapshot = JSON.stringify(item);
+    render();
+  }
+
+  function closeEditor(section) {
+    section.editing = null;
+    section.snapshot = null;
+  }
+
+  function editorDirty(section) {
+    return Boolean(section.editing) && JSON.stringify(section.editing) !== section.snapshot;
+  }
+
+  /**
+   * 關掉開著的編輯畫面。有沒存的修改就先問一次。
+   *
+   * 回傳 false 代表使用者選擇留下——呼叫端要**放棄自己原本要做的事**
+   * （不要切頁籤、不要重載清單），否則畫面會換掉而他以為自己留在原地。
+   */
+  async function leaveEditors() {
+    for (const section of [state.mmg, state.users, state.bookings]) {
+      if (!section.editing) continue;
+      if (editorDirty(section)) {
+        const ok = await confirmDialog({
+          title: '尚未儲存',
+          body: '目前修改尚未儲存，是否確認退出？',
+          confirmText: '退出不儲存',
+          cancelText: '留在這裡',
+          danger: true,
+        });
+        if (!ok) return false;
+      }
+      closeEditor(section);
+    }
+    return true;
+  }
+
   /** 清單上方的「新增」列。三個頁籤共用。 */
   function addBar(label, onClick, extra = null) {
     return el('div', { class: 'section toolbar' }, [
@@ -388,7 +439,7 @@ export function createAdminView({ tab, sub } = {}) {
     fill(listNode);
 
     return el('div', {}, [
-      addBar('＋ 新增劇本', () => { s.editing = openSchedule(emptyMmg()); render(); },
+      addBar('＋ 新增劇本', () => openEditor(s, openSchedule(emptyMmg())),
         searchBox(s, '搜尋劇本名稱', listNode, fill)),
       el('div', { class: 'section' }, [listNode]),
     ]);
@@ -415,7 +466,7 @@ export function createAdminView({ tab, sub } = {}) {
       ]),
       el('div', { class: 'list-item__side' }, [
         m.status !== 'active' && el('div', { class: 'status-chip' }, '下架'),
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = openSchedule(deepCopy(m)); render(); } }, '編輯'),
+        el('button', { class: 'btn btn--ghost btn--small', onClick: () => openEditor(s, openSchedule(deepCopy(m))) }, '編輯'),
       ]),
     ]);
   }
@@ -488,7 +539,8 @@ export function createAdminView({ tab, sub } = {}) {
       ...m.gm_slots.map((slot, i) => renderGmSlot(m, slot, i)),
 
       el('div', { class: 'row', style: 'margin-top:8px' }, [
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
+        el('button', { class: 'btn btn--ghost btn--small',
+          onClick: async () => { if (await leaveEditors()) render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
           disabled: !m.start_booking || Boolean(listingOrderError(m)),
@@ -507,7 +559,7 @@ export function createAdminView({ tab, sub } = {}) {
             // 存檔前把排期的工作副本轉回要送出去的形狀。
             save(
               m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
-              (saved) => { upsert(s.items, saved); s.editing = null; render(); },
+              (saved) => { upsert(s.items, saved); closeEditor(s); render(); },
               { create: !m.id },
             );
           },
@@ -836,7 +888,7 @@ export function createAdminView({ tab, sub } = {}) {
     fill(listNode);
 
     return el('div', {}, [
-      addBar('＋ 新增使用者', () => { s.editing = emptyUser(); render(); },
+      addBar('＋ 新增使用者', () => openEditor(s, emptyUser()),
         searchBox(s, '搜尋稱呼或 Email', listNode, fill)),
       el('div', { class: 'section' }, [listNode]),
     ]);
@@ -881,7 +933,7 @@ export function createAdminView({ tab, sub } = {}) {
         u.status === 'banned'
           ? el('div', { class: 'status-chip status-chip--warn' }, '異常停權')
           : u.status !== 'active' && el('div', { class: 'status-chip' }, '停用'),
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = deepCopy(u); render(); } }, '編輯'),
+        el('button', { class: 'btn btn--ghost btn--small', onClick: () => openEditor(s, deepCopy(u)) }, '編輯'),
       ]),
     ]);
   }
@@ -926,7 +978,8 @@ export function createAdminView({ tab, sub } = {}) {
         field({ label: '電話', control: el('input', { type: 'text', value: u.phone ?? '', onInput: setField('phone') }) }),
       ]),
       el('div', { class: 'row', style: 'margin-top:8px' }, [
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { s.editing = null; render(); } }, '取消'),
+        el('button', { class: 'btn btn--ghost btn--small',
+          onClick: async () => { if (await leaveEditors()) render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
           onClick: async () => {
@@ -946,7 +999,7 @@ export function createAdminView({ tab, sub } = {}) {
             }
             save(
               u.id ? `/api/admin/users/${u.id}` : '/api/admin/users', u,
-              (saved) => { upsert(s.items, saved); s.editing = null; render(); },
+              (saved) => { upsert(s.items, saved); closeEditor(s); render(); },
               { create: !u.id },
             );
           },
@@ -956,6 +1009,34 @@ export function createAdminView({ tab, sub } = {}) {
   }
 
   // ── 場次管理 ────────────────────────────────────────────
+
+  /**
+   * 場次管理的子頁籤（五個狀態）。
+   *
+   * ★ 編輯單筆時也要畫出來。它原本住在清單裡面，所以一進編輯畫面整排就
+   *   不見了——使用者只剩「取消」一條路回得去，而點頁籤是更直覺的做法。
+   *   （主頁籤在更外層，本來就一直看得到。）
+   */
+  function renderBookingTabs() {
+    const b = state.bookings;
+    if (!b.tabOrder.length) return null;
+    return el('div', { class: 'tabs' }, b.tabOrder.map((key) =>
+      el('button', {
+        class: `tab${key === b.tab ? ' tab--active' : ''}`,
+        onClick: async () => {
+          // 點子頁籤同樣算「離開編輯畫面」，有沒存的修改會先問一次。
+          if (!await leaveEditors()) return;
+          b.tab = key;
+          setRouteSub('admin', subRoute.toSlug(key), instance);
+          // 篩選面板的工作副本要換成**新**頁籤的條件。原本這裡複製的是
+          // 切換前那個頁籤的（closure 裡的 t），所以面板上會出現上一個
+          // 頁籤的篩選字串——跟 mybookings.js 的 switchTab 不一致。
+          b.draft = { ...b.data[key].filters };
+          render();
+        },
+      }, b.tabs[key]),
+    ));
+  }
 
   function renderBookingsList() {
     const b = state.bookings;
@@ -973,17 +1054,7 @@ export function createAdminView({ tab, sub } = {}) {
     if (!t) return spinner();
 
     const nodes = [
-      el('div', { class: 'tabs' }, b.tabOrder.map((key) =>
-        el('button', {
-          class: `tab${key === b.tab ? ' tab--active' : ''}`,
-          onClick: () => {
-            b.tab = key;
-            setRouteSub('admin', subRoute.toSlug(key), instance);
-            b.draft = { ...t.filters };
-            render();
-          },
-        }, b.tabs[key]),
-      )),
+      renderBookingTabs(),
       el('div', { class: 'section toolbar' }, [
         el('button', {
           class: 'btn btn--ghost btn--small',
@@ -1008,8 +1079,9 @@ export function createAdminView({ tab, sub } = {}) {
           // 新增場次要選預定者，而使用者清單是切到「使用者管理」才載的。
           // 這裡順手載一次，不然那個下拉會是空的。
           onClick: () => {
-            b.editing = emptyBooking();
-            if (!state.users.items.length) loadUsers(); else render();
+            openEditor(b, emptyBooking());
+            // 新增場次要選預定者，而使用者清單是切到「使用者管理」才載的。
+            if (!state.users.items.length) loadUsers();
           },
         }, '＋ 新增場次'),
       ]),
@@ -1065,7 +1137,7 @@ export function createAdminView({ tab, sub } = {}) {
           // None 直接退件「未知的狀態」。任何「不改狀態的儲存」都會失敗。
           el('button', {
             class: 'btn btn--ghost btn--small',
-            onClick: () => { state.bookings.editing = { ...deepCopy(item), status: b.tab }; render(); },
+            onClick: () => openEditor(b, { ...deepCopy(item), status: b.tab }),
           }, '編輯')),
       ]),
     ))));
@@ -1253,7 +1325,8 @@ export function createAdminView({ tab, sub } = {}) {
       }).filter(Boolean),
 
       el('div', { class: 'row', style: 'margin-top:8px' }, [
-        el('button', { class: 'btn btn--ghost btn--small', onClick: () => { b.editing = null; render(); } }, '取消'),
+        el('button', { class: 'btn btn--ghost btn--small',
+          onClick: async () => { if (await leaveEditors()) render(); } }, '取消'),
         el('button', {
           class: 'btn btn--primary btn--small',
           onClick: async () => {
@@ -1269,7 +1342,7 @@ export function createAdminView({ tab, sub } = {}) {
                 // 順便切過去：剛建好的東西應該看得到，留在原本的頁籤上
                 // 會像是什麼都沒發生。回第一頁同理。
                 const landed = item.status ?? 'gm_confirm';
-                b.editing = null;
+                closeEditor(b);
                 b.tab = landed;
                 b.data[landed].start = 1;
                 b.draft = { ...b.data[landed].filters };
@@ -1302,7 +1375,7 @@ export function createAdminView({ tab, sub } = {}) {
                 if (!ok) return;
               }
             }
-            save(`/api/admin/bookings/${item.id}`, item, () => { b.editing = null; loadBookings(); });
+            save(`/api/admin/bookings/${item.id}`, item, () => { closeEditor(b); loadBookings(); });
           },
         }, isNew ? '新增' : '儲存'),
       ]),
@@ -1463,7 +1536,12 @@ export function createAdminView({ tab, sub } = {}) {
         ...SECTIONS.map((s) =>
           el('button', {
             class: `tab${s.key === state.section ? ' tab--active' : ''}`,
-            onClick: () => loadSection(s.key),
+            // 點頁籤＝離開編輯畫面。點的是**目前這一個**頁籤時只關掉編輯
+            // 畫面、不重抓清單——那是「我要回到列表」的意思，不是「重載」。
+            onClick: async () => {
+              if (!await leaveEditors()) return;
+              if (s.key === state.section) render(); else loadSection(s.key);
+            },
           }, s.label),
         ),
         el('div', { class: 'tabs__action' }, tidyBtn),
@@ -1477,7 +1555,9 @@ export function createAdminView({ tab, sub } = {}) {
     } else if (state.section === 'abuse') {
       root.append(renderAbuseList());
     } else {
-      root.append(state.bookings.editing ? renderBookingEditor() : renderBookingsList());
+      root.append(...(state.bookings.editing
+        ? [renderBookingTabs(), renderBookingEditor()].filter(Boolean)
+        : [renderBookingsList()]));
     }
   }
 
