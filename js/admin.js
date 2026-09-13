@@ -260,7 +260,9 @@ export function createAdminView({ tab, sub } = {}) {
       b.tabs = d.tabs;
       b.tabOrder = Object.keys(d.tabs);
       // 子頁籤清單是後端給的，完整性只能在這裡檢查。
-      b.gap = slugGap('管理員／場次管理', STATUS_SLUG, b.tabOrder);
+      // subset：頁籤是後端依這家店的功能表給的，表裡多出來的狀態
+      // 是別家店在用的，不是缺陷（見 route.js 的 slugGap）。
+      b.gap = slugGap('管理員／場次管理', STATUS_SLUG, b.tabOrder, { subset: true });
       // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個。
       // ★ 一定要對 tabOrder 驗一次：b.tab 直接來自網址，指到一個不存在的
       //   子頁籤時底下 b.data[b.tab] 會是 undefined，畫面會整個炸掉。

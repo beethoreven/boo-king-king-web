@@ -66,7 +66,8 @@ export function createMyBookingsView({ tab } = {}) {
       for (const key of state.tabOrder) state.data[key] = emptyTab();
       // 頁籤清單是後端給的，所以完整性只能在這裡檢查——不像靜態的表可以
       // 在載入時就擋下來。
-      state.gap = slugGap('我預定的場次', STATUS_SLUG, state.tabOrder);
+      // subset 的理由同 admin.js。
+      state.gap = slugGap('我預定的場次', STATUS_SLUG, state.tabOrder, { subset: true });
       // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個頁籤。
       const wanted = tabRoute.toKey(tab);
       state.tab = state.tabOrder.includes(wanted) ? wanted : state.tabOrder[0];
