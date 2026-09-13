@@ -157,17 +157,11 @@ export function createMyBookingsView({ tab } = {}) {
   }
 
   function renderItem(item) {
-    const paid = item.deposit ?? 0;
-    const due = item.booking_cost ?? 0;
     return el('div', { class: 'card list-item' }, [
       el('div', { class: 'list-item__main' }, [
         el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
         el('div', { class: 'list-item__meta' },
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`),
-        // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
-        // 是在講一件已經不會發生的事。
-        !['ended', 'cancelled'].includes(item.status)
-          && el('div', { class: 'list-item__meta' }, `訂金 ${paid} / ${due}`),
       ]),
       el('div', { class: 'list-item__side' }, [
         // 序位只在還沒定案時有意義。已成立就是他的場，講「第 1 序位」

@@ -26,7 +26,7 @@
 import { api, ApiError } from './api.js';
 import { createCalendar } from './calendar.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl,
-         dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
+         dualPrice } from './ui.js';
 import { getUser } from './auth.js';
 
 // 時與分的下拉選項。分只給整點與半點——場次時間是以半小時為單位的約定，
@@ -597,22 +597,13 @@ export function createBookingView() {
 
     const date = currentDate();
     const time = currentTime();
-    // 到這一步日期已經選好了，所以講的是「這一場」的訂金，不是劇本那兩個
-    // 數字。平日假日金額一樣的劇本（步經徑全部都是）不標場次類型，畫面
-    // 跟原本一模一樣；不一樣時才講明是哪一種，免得玩家看到的金額跟上方
-    // 標籤的其中一個對不上而困惑。
-    //
-    // ★ 場次類型是依日期推的（週六日＝假日）。國定假日要由店家事後在場次
-    //   管理改，所以這裡的金額是「預設」——跟後端建立時寫進去的值一致。
-    const dayType = dayTypeOf(date);
+    // ★ 這裡不講金額。這家店不收訂金（functions 表 deposit=off），而售價
+    //   是到場才結的，寫在上方的標籤列就夠——在「確認預約」這一步再報一次
+    //   價，會讓人以為按下去要先付錢。
     const d = state.detail;
-    const due = depositDue(d, dayType) ?? 0;
-    const differs = d.booking_cost != null && d.booking_cost_holiday != null
-      && d.booking_cost !== d.booking_cost_holiday;
     const ok = await confirmDialog({
       title: '確認預約',
-      body: `${d.name}\n${date} ${time}\n訂金 NT$ ${due}`
-        + (differs && dayType ? `（${DAY_TYPE_LABEL[dayType]}）` : ''),
+      body: `${d.name}\n${date} ${time}`,
       confirmText: '送出預約',
     });
     if (!ok) return;
@@ -707,8 +698,8 @@ export function createBookingView() {
       // 店家已經把單位寫在裡面了，再補一個「人」會變成「…可反串 人」。
       d.players,
       // 平日假日一樣就只有一個數字（見 ui.js 的 dualPrice）。
+      // 沒有訂金那一格：這家店不收訂金（functions 表 deposit=off）。
       dualPrice(d.price, d.price_holiday),
-      dualPrice(d.booking_cost, d.booking_cost_holiday) && `訂金 ${dualPrice(d.booking_cost, d.booking_cost_holiday)}`,
     ]) {
       if (tag) tagRow.append(el('div', { class: 'tag' }, tag));
     }
