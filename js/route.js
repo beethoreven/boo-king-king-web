@@ -214,10 +214,25 @@ export function slugs(table) {
 
 /**
  * 表跟實際頁籤對不對得起來。對得上回 null，否則回一句可以直接給人看的話。
+ *
+ * 兩個方向的意義不一樣：
+ *
+ *   **少了**（有頁籤沒有網址名稱）永遠是缺陷。那個頁籤切過去網址會寫不
+ *     出來，使用者分享出去的連結會指向別的地方。
+ *
+ *   **多了**（表裡有這裡用不到的名稱）要看清單從哪來：
+ *     - 靜態的表（assertSlugs）：是缺陷。一個指向不存在畫面的名稱就是
+ *       死設定，留著只會讓人以為那個畫面還在。
+ *     - 後端給的頁籤（subset: true）：**不是**缺陷。頁籤由功能表決定，
+ *       一家店本來就只用得到其中幾個——不收訂金的店沒有「等待支付訂金」。
+ *       表要涵蓋所有店家的所有狀態，那是它的職責。
+ *
+ * ★ subset 模式下，「表涵不涵蓋得了後端的完整狀態清單」就檢查不到了——
+ *   單一家店的回應看不出全貌。那一項只能靠人比對後端的 TAB_LABEL。
  */
-export function slugGap(name, table, keys) {
+export function slugGap(name, table, keys, { subset = false } = {}) {
   const missing = keys.filter((k) => !(k in table));
-  const extra = Object.keys(table).filter((k) => !keys.includes(k));
+  const extra = subset ? [] : Object.keys(table).filter((k) => !keys.includes(k));
   if (!missing.length && !extra.length) return null;
   const parts = [];
   if (missing.length) parts.push(`少了 ${missing.join('、')}`);
