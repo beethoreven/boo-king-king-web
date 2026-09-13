@@ -18,10 +18,14 @@
   --border: #e6e5e3;
   --border-soft: #f1f0ee;
 
-  --ink: #2c2c2b;
-  --ink-soft: #6b6a67;
-  --ink-faint: #9b9a97;
-  --ink-disabled: #c4c3c0;
+  /* ★ 2026-09-14 整組壓深一階。原本那組（#2c2c2b / #6b6a67 / #9b9a97 /
+     #c4c3c0）是從取樣站量來的，但那個站的版面留白多、字級大；搬到這個
+     介面上——資訊密度高、字級 13~14px——在純白底上就顯得太淡。
+     深色底那版可以靠對比撐住，白底沒有這個餘裕。 */
+  --ink: #141413;          /* 內文。近黑，不是純黑：純黑在白底上邊緣會刺 */
+  --ink-soft: #45443f;     /* 次要說明 */
+  --ink-faint: #6b6a66;    /* 提示、未選中的頁籤 */
+  --ink-disabled: #a3a29e; /* 停用 */
 
   /* 深棕。--on-accent 是「放在 accent 底色上的字」，用淺米——那是取樣站
      「民國」標籤的配色翻過來（原本淺米底深棕字），對比 6.0 : 1。
@@ -289,7 +293,13 @@ select option { background: var(--surface); color: var(--ink); }
   white-space: nowrap;
 }
 
-.tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+/* 選中的頁籤用純黑，不是 accent。
+   ★ 這是這份配色裡唯一的純黑（案主指定）：頁籤是「我現在在哪」的唯一
+     指示，它必須是整頁最重的字；用 accent（棕）的話它跟旁邊的標籤、
+     連結同一個重量，掃過去分不出哪個是選中的。
+     底線維持 accent —— 顏色與粗細各自表達一件事，兩個都改成黑會讓那
+     一條線看起來像分隔線而不是指標。 */
+.tab--active { color: #000; border-bottom-color: var(--accent); }
 
 /* ── 狀態訊息 ───────────────────────────────────────────── */
 
