@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink,
-         dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
+         dualPrice, dayTypeOf, DAY_TYPE_LABEL } from './ui.js';
 import { adminMaySave } from './conflicts.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
          STATUS_SLUG, newInstance } from './route.js';
@@ -100,13 +100,27 @@ const BOOKING_STATUS_OPTIONS = [
 // 會讓上一次沒存檔的編輯殘留到下一次新增。
 const emptyMmg = () => ({
   id: null, name: '', url: '', period: null,
-  price: null, price_holiday: null, booking_cost: null, booking_cost_holiday: null,
+  price: null, price_holiday: null,
+  // ★ 訂金兩格固定 0，畫面上沒有這兩個欄位。這家店不收訂金
+  //   （functions 表 deposit=off），後端那道「開放的日子必須有對應訂金」
+  //   的檢查在這種店整段跳過，但送 null 會讓劇本管理的清單出現一格空的
+  //   「訂金 —」。0 的意思就是免訂金，跟畫面說的一致。
+  booking_cost: 0, booking_cost_holiday: 0,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
-  players: '', waitlist_limit: 3, status: 'active', room_id: 1,
+  players: '', waitlist_limit: 1, status: 'active', room_id: 1,
   // 新劇本預設此刻上架。上架是一個明確的時刻，不只是日期。
   start_booking: nowISO(), end_booking: null,
   schedule: { weekly: [], exceptions: [] },
-  gm_slots: [1, 2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
+  // ★ 固定一個角色、固定叫「主持人」，畫面上沒有這一段。
+  //
+  //   這家店只有一位主持人，角色要幾個、叫什麼名字對她沒有意義。但這個
+  //   欄位不能留空：single 模式下後端是照「有沒有名字」決定要不要把她掛
+  //   上去的，全空的劇本每一筆預約的 gm 欄位都會是 null。（後端另外有
+  //   一道保險，卡場不看那些欄位；這裡是讓資料本身就是對的。）
+  gm_slots: [
+    { slot: 1, name: '主持人', user_ids: [1] },
+    ...[2, 3, 4].map((slot) => ({ slot, name: '', user_ids: [] })),
+  ],
 });
 
 // 0=週日，跟後端 mmg_weekly_slot.weekday 與 JS 的 Date.getDay() 一致。
@@ -129,7 +143,7 @@ const emptyBooking = () => ({
   id: null, mmg_id: null, player_id: null,
   // day_type 在選了日期之後才推得出來；在那之前是 null，送出去後端會依日期推。
   session_date: '', session_time: '', day_type: null, status: 'gm_confirm',
-  deposit: 0, note: '',
+  note: '',
   gm_user_ids: [null, null, null, null],
   gm_confirmed: [false, false, false, false],
 });
@@ -154,7 +168,7 @@ export function createAdminView({ tab, sub } = {}) {
   const state = {
     section: sectionRoute.toKey(tab) ?? 'mmg',
     // editing 是開著的編輯畫面，snapshot 是它剛打開時的樣子（見 openEditor）
-    mmg: { items: [], gmCandidates: [], rooms: [], loading: true, editing: null, snapshot: null,
+    mmg: { items: [], loading: true, editing: null, snapshot: null,
            search: '', failed: false },
     users: { items: [], loading: true, editing: null, snapshot: null, search: '', failed: false },
     abuse: { items: [], has_more: false, start: 1, loading: true, meta: {},
@@ -196,8 +210,6 @@ export function createAdminView({ tab, sub } = {}) {
       const d = await api.get('/api/admin/mmg');
       if (stale(state.mmg, mine)) return;
       state.mmg.items = d.items;
-      state.mmg.gmCandidates = d.gm_candidates;
-      state.mmg.rooms = d.rooms ?? [];
       state.mmg.failed = false;
     } catch (err) {
       if (stale(state.mmg, mine)) return;
@@ -466,12 +478,10 @@ export function createAdminView({ tab, sub } = {}) {
           // players 是自由文字，店家已經自己寫了「6人性別不詳」這種完整
           // 描述，後面再補一個「人」就變成「…不詳 人」。
           + ` · ${m.players ?? '—'}`),
-        // 平日假日一樣時長得跟原本一模一樣（「NT$ 1580 · 訂金 1000」）。
+        // 平日假日一樣時只顯示一個數字。
         el('div', { class: 'list-item__meta' },
           `${dualPrice(m.price, m.price_holiday) ?? 'NT$ —'}`
-          + ` · 訂金 ${dualPrice(m.booking_cost, m.booking_cost_holiday, { prefix: '' }) ?? '—'}`),
-        el('div', { class: 'list-item__meta' },
-          m.gm_slots.filter((g) => g.name).map((g) => `${g.name}（${g.user_ids.length} 人可帶）`).join('、') || '尚未設定角色'),
+          ),
       ]),
       el('div', { class: 'list-item__side' }, [
         m.status !== 'active' && el('div', { class: 'status-chip' }, '下架'),
@@ -508,20 +518,15 @@ export function createAdminView({ tab, sub } = {}) {
           control: el('input', { type: 'number', step: '0.1', min: '0', value: m.reset_time_cost ?? 0.5, onInput: setNum('reset_time_cost') }) }),
       ]),
       el('div', { class: 'field__hint' },
-        '包廂被佔用的區間是「開始前的佈置」到「結束後的還原」，衝突判定看的是這一段'),
+        '這段時間算你被佔住：從「開始前的佈置」到「結束後的還原」，同一個時間不會再被訂走'),
       // 左平日、右假日。只有一種價錢的劇本兩格填一樣（或只填其中一格）——
       // 兩個數字一樣時，其他畫面只會顯示一個。
-      // 訂金空著的那一種日子不能開放：存檔時後端會檢查（0 是免訂金，不是空）。
       el('div', { class: 'row' }, [
         field({ label: '售價（平日）', control: el('input', { type: 'number', min: '0', value: m.price ?? '', onInput: setNum('price') }) }),
         field({ label: '售價（假日）', control: el('input', { type: 'number', min: '0', value: m.price_holiday ?? '', onInput: setNum('price_holiday') }) }),
       ]),
-      el('div', { class: 'row' }, [
-        field({ label: '訂金（平日）', control: el('input', { type: 'number', min: '0', value: m.booking_cost ?? '', onInput: setNum('booking_cost') }) }),
-        field({ label: '訂金（假日）', control: el('input', { type: 'number', min: '0', value: m.booking_cost_holiday ?? '', onInput: setNum('booking_cost_holiday') }) }),
-      ]),
       el('div', { class: 'field__hint' },
-        '假日＝週六日。國定假日、補班日在場次管理把那一場的「場次類型」改掉。不收訂金請填 0，留空代表沒設定'),
+        '假日＝週六日。國定假日、補班日在場次管理把那一場的「場次類型」改掉'),
       el('div', { class: 'row' }, [
         field({ label: '序位上限', control: el('input', { type: 'number', min: '0', value: m.waitlist_limit ?? 3, onInput: setNum('waitlist_limit') }),
           hint: '這個時段最多可以有幾組（含已成立的）' }),
@@ -530,22 +535,8 @@ export function createAdminView({ tab, sub } = {}) {
           control: select({ options: MMG_STATUS_OPTIONS, value: m.status, onChange: (v) => { m.status = v; }, ariaLabel: '劇本狀態' }),
         }),
       ]),
-      field({
-        label: '包廂',
-        control: select({
-          options: state.mmg.rooms.map((r) => ({ value: r.id, label: r.name })),
-          value: m.room_id ?? 1,
-          onChange: (v) => { m.room_id = Number(v); },
-          ariaLabel: '包廂',
-        }),
-        hint: '場次衝突是看包廂有沒有被佔用，不是看同一齣戲被排兩場',
-      }),
-
       el('div', { class: 'section__label', style: 'margin-top:8px' }, '開放預約的日期與時段'),
       renderSchedule(m),
-
-      el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人角色'),
-      ...m.gm_slots.map((slot, i) => renderGmSlot(m, slot, i)),
 
       el('div', { class: 'row', style: 'margin-top:8px' }, [
         el('button', { class: 'btn btn--ghost btn--small',
@@ -819,59 +810,6 @@ export function createAdminView({ tab, sub } = {}) {
     return el('div', { class: 'exc' }, [topRow, timeRow, errNode]);
   }
 
-  /** 一個主持人角色：名稱 + 已加入的人（標籤，可移除）+ 新增下拉。 */
-  function renderGmSlot(m, slot, index) {
-    const hasName = Boolean((slot.name ?? '').trim());
-    const candidates = state.mmg.gmCandidates.filter((c) => !slot.user_ids.includes(c.id));
-
-    return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:8px' }, [
-      field({
-        label: `角色 ${slot.slot} 名稱`,
-        // 名稱清空時，資料庫的 CHECK 約束要求名單也必須是空的。
-        // 這裡直接連動清掉，讓畫面跟規則一致——不然使用者會在儲存時
-        // 才被擋下，而且不知道為什麼。
-        control: el('input', {
-          type: 'text',
-          value: slot.name ?? '',
-          placeholder: '留空＝這齣戲沒有這個角色',
-          // 打字時只寫值，不重繪。render() 會把整個畫面重建，正在編輯的
-          // 這個欄位也會被換成新節點——焦點跟著消失，打一個字就跳走。
-          // 注音更嚴重：組字中的狀態在元素被銷毀後無法還原，等於完全
-          // 打不了中文。
-          onInput: (e) => { slot.name = e.target.value; },
-          // 依附這個值的 UI（下面的主持人標籤、新增下拉、提示文字）改在
-          // 離開欄位時才更新。change 不會在組字途中觸發，所以不會打斷輸入。
-          onChange: (e) => {
-            slot.name = e.target.value;
-            if (!e.target.value.trim()) slot.user_ids = [];
-            render();
-          },
-        }),
-        hint: hasName ? '' : '留空時不能指派主持人',
-      }),
-      hasName && el('div', { class: 'tag-row' }, [
-        ...slot.user_ids.map((uid) => {
-          const person = state.mmg.gmCandidates.find((c) => c.id === uid);
-          return el('div', { class: 'tag' }, [
-            person ? person.name : `id=${uid}`,
-            el('button', {
-              class: 'tag__remove',
-              'aria-label': '移除',
-              onClick: () => { slot.user_ids = slot.user_ids.filter((x) => x !== uid); render(); },
-            }, '×'),
-          ]);
-        }),
-        !slot.user_ids.length && el('div', { class: 'field__hint' }, '尚未指派主持人'),
-      ]),
-      hasName && candidates.length > 0 && select({
-        options: [{ value: '', label: '新增主持人…' }, ...candidates.map((c) => ({ value: c.id, label: c.name }))],
-        value: '',
-        onChange: (v) => { if (v) { slot.user_ids.push(Number(v)); render(); } },
-        ariaLabel: `為角色 ${slot.slot} 新增主持人`,
-      }),
-    ]);
-  }
-
   // ── 使用者管理 ──────────────────────────────────────────
 
   function renderUsersList() {
@@ -1139,7 +1077,6 @@ export function createAdminView({ tab, sub } = {}) {
           el('div', { class: 'list-item__meta' }, [
             `${item.session_date} ${item.session_time} · ${item.player_name}`,
           ]),
-          el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),
         el('div', { class: 'list-item__side' },
           // 補上 status 再進編輯畫面。清單那一包刻意沒有這個欄位（子頁籤
@@ -1163,26 +1100,6 @@ export function createAdminView({ tab, sub } = {}) {
     return el('div', {}, nodes);
   }
 
-  /**
-   * 這場還沒「有人確認」的角色，回傳可以直接顯示的說明字串。
-   *
-   * 沒指派到人也算數：一個角色掛著空位，跟掛著一個還沒點頭的人，對
-   * 「這場到底成不成立」來說是同一件事——都還沒有人答應要帶。
-   *
-   * 讀的是畫面上當下的值（item.gm_user_ids / item.gm_confirmed），不是
-   * 資料庫載入時的值。管理員可能在同一個表單裡先勾了確認再改狀態，
-   * 那就該以他眼前看到的為準。
-   */
-  function unconfirmedRoles(item, mmg) {
-    const out = [];
-    for (const [i, slot] of (mmg?.gm_slots ?? []).entries()) {
-      if (!slot.name) continue;                       // 這齣戲沒有這個角色
-      if (!item.gm_user_ids[i]) out.push(`${slot.name}：未指定主持人`);
-      else if (!item.gm_confirmed[i]) out.push(`${slot.name}：尚未確認`);
-    }
-    return out;
-  }
-
   function renderBookingEditor() {
     const b = state.bookings;
     const item = b.editing;
@@ -1190,33 +1107,13 @@ export function createAdminView({ tab, sub } = {}) {
 
     const isNew = !item.id;
 
-    // ── 場次類型與訂金 ──
+    // ── 場次類型 ──
     //
-    // 應收訂金看「劇本 × 場次類型」，所以訂金那一格的提示要跟著日期、類型
-    // 一起變。
-    //
-    // ★ 換日期時只換掉這兩格，不重繪整張表單：管理員可能正在用鍵盤打日期，
+    // ★ 換日期時只換掉這一格，不重繪整張表單：管理員可能正在用鍵盤打日期，
     //   而 Chrome 在打年份的途中就會一直觸發 change（0002、0020、0202、2026
     //   每一個都是合法日期）。整張重繪會把他正在打的那個輸入框換掉。
     //
-    // 劇本清單沒載到的時候（undefined）就不講應收、也不比對：清單上那一筆
-    // 自己帶的應收是「改類型之前」那一種的金額，配上新的類型標籤會是一句
-    // 錯話。不說比說錯好——清單那一行仍然有後端算好的數字。
-    const due = () => (mmg ? depositDue(mmg, item.day_type) : undefined);
-    const depositField = () => field({
-      label: '訂金',
-      control: el('input', {
-        type: 'number', value: item.deposit ?? 0,
-        // 同樣不在打字途中重繪。下面的 warn（訂金與應收金額的關係）
-        // 依附這個值，改成離開欄位時才更新。
-        onInput: (e) => { item.deposit = Number(e.target.value || 0); },
-        onChange: () => render(),
-      }),
-      warn: depositWarning(item.deposit, due()),
-      hint: dueHint(item.day_type, due()),
-    });
-    const depositBox = el('div', {}, depositField());
-    const refreshDeposit = () => { clear(depositBox); depositBox.append(depositField()); };
+    // 這家店不收訂金，所以類型只影響售價，不影響任何要收的錢。
     const dayTypeControl = select({
       options: [
         // 新增場次、還沒選日期時沒有類型可言；選了日期就會自動帶上。
@@ -1225,7 +1122,7 @@ export function createAdminView({ tab, sub } = {}) {
         { value: 'holiday', label: DAY_TYPE_LABEL.holiday },
       ],
       value: item.day_type ?? '',
-      onChange: (v) => { item.day_type = v || null; refreshDeposit(); },
+      onChange: (v) => { item.day_type = v || null; },
       ariaLabel: '場次類型',
     });
 
@@ -1276,7 +1173,6 @@ export function createAdminView({ tab, sub } = {}) {
               if (t && t !== item.day_type) {
                 item.day_type = t;
                 dayTypeControl.querySelector('select').value = t;
-                refreshDeposit();
               }
             },
           }),
@@ -1284,8 +1180,7 @@ export function createAdminView({ tab, sub } = {}) {
         field({ label: '時間', control: el('input', { type: 'time', step: '1800', value: item.session_time, onChange: (e) => { item.session_time = e.target.value; } }) }),
       ]),
       el('div', { class: 'row' }, [
-        // 國定假日、補班日系統不知道，要在這裡手動改。已成立的場次改了類型
-        // 不會退回待收訂金（後端也不會），差額看下面訂金那一格的提示。
+        // 國定假日、補班日系統不知道，要在這裡手動改。只影響售價。
         field({ label: '場次類型', control: dayTypeControl }),
         field({
           label: '狀態',
@@ -1298,42 +1193,8 @@ export function createAdminView({ tab, sub } = {}) {
           }),
         }),
       ]),
-      depositBox,
       field({ label: '備註', control: el('textarea', { rows: '3', value: item.note ?? '', onInput: (e) => { item.note = e.target.value; } }) }),
 
-      el('div', { class: 'section__label', style: 'margin-top:8px' }, '主持人'),
-      ...(mmg?.gm_slots ?? []).map((slot, i) => {
-        if (!slot.name) return null;
-        const candidates = state.mmg.gmCandidates.filter((c) => slot.user_ids.includes(c.id));
-        return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:8px' }, [
-          field({
-            label: slot.name,
-            control: select({
-              options: [{ value: '', label: '未指定' }, ...candidates.map((c) => ({ value: c.id, label: c.name }))],
-              value: item.gm_user_ids[i] ?? '',
-              onChange: (v) => {
-                item.gm_user_ids[i] = v ? Number(v) : null;
-                // 沒有人就不可能已確認，連動清掉——後端也會做同樣的
-                // 清理，這裡先做是為了畫面立刻反映規則。
-                if (!v) item.gm_confirmed[i] = false;
-                render();
-              },
-              ariaLabel: `${slot.name} 的主持人`,
-            }),
-          }),
-          el('label', { class: 'checkline' }, [
-            el('input', {
-              type: 'checkbox',
-              checked: Boolean(item.gm_confirmed[i]),
-              disabled: !item.gm_user_ids[i],
-              // 只記錄，檢查在儲存時一起做——每勾一次查一次會把免費方案
-              // 的額度花在使用者還沒決定送出的中途狀態上。
-              onChange: (e) => { item.gm_confirmed[i] = e.target.checked; },
-            }),
-            '已確認',
-          ]),
-        ]);
-      }).filter(Boolean),
 
       el('div', { class: 'row', style: 'margin-top:8px' }, [
         el('button', { class: 'btn btn--ghost btn--small',
@@ -1366,25 +1227,10 @@ export function createAdminView({ tab, sub } = {}) {
             // 清單那一包沒有 status 欄位（子頁籤本身就是狀態），所以原本
             // 的狀態就是當前頁籤。
             const statusChanged = target !== b.tab;
-            const original = b.data[b.tab]?.items.find((x) => x.id === item.id);
-            const newlyConfirmed = Boolean(original) && item.gm_confirmed
-              .some((v, i) => v && !original.gm_confirmed[i]);
-
-            // 只有真的在「推進」這場的時候才檢查。改個備註、改個訂金
-            // 不必打那支查詢——免費方案的額度要花在有意義的地方。
-            if (target !== 'cancelled' && (statusChanged || newlyConfirmed)) {
+            // 只有真的在「推進」這場的時候才檢查撞期。改個備註不必打那支
+            // 查詢——免費方案的額度要花在有意義的地方。
+            if (target !== 'cancelled' && statusChanged) {
               if (!await adminMaySave(item.id)) return;
-
-              const outstanding = unconfirmedRoles(item, mmg);
-              if (outstanding.length) {
-                const ok = await confirmDialog({
-                  title: '目前尚有主持人未確認',
-                  body: `${outstanding.join('\n')}\n\n還是要切換嗎？`,
-                  confirmText: '還是要',
-                  cancelText: '取消',
-                });
-                if (!ok) return;
-              }
             }
             save(`/api/admin/bookings/${item.id}`, item, () => { closeEditor(b); loadBookings(); });
           },
@@ -1572,12 +1418,12 @@ export function createAdminView({ tab, sub } = {}) {
     }
   }
 
-  // 場次編輯要用到劇本的角色定義，所以一開始就把劇本也載進來。
+  // 新增場次要選劇本，所以一開始就把劇本清單也載進來。
   //
   // ★ 這一行跟「初始停在哪一節」無關，**兩種情況都要跑**。從網址直接進
-  //   場次管理時它一樣是必要的：renderBookingEditor() 讀 state.mmg.items
-  //   與 gmCandidates，沒載的話那些下拉會是空的、主持人欄位會整排消失，
-  //   而且不會有任何錯誤——只是「編輯畫面少了一半」，沒有人會發現。
+  //   場次管理時它一樣是必要的：renderBookingEditor() 讀 state.mmg.items，
+  //   沒載的話那個下拉會是空的，而且不會有任何錯誤——只是「選不到
+  //   劇本」，看起來像這家店還沒有劇本。
   loadMmg();
   // loadSection('mmg') 會再打一次 loadMmg()，所以預設那一節只寫網址、
   // 不重複呼叫。
@@ -1597,32 +1443,3 @@ function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
 }
 
-/**
- * 訂金欄位下面那行：這一場該收多少。
- *
- * 類型還不知道（新增、沒選日期）或應收算不出來（undefined，劇本清單沒載到）
- * 就不講。null 才是「這齣戲沒設定」，那要講出來。
- */
-function dueHint(dayType, due) {
-  const type = DAY_TYPE_LABEL[dayType];
-  if (!type || due === undefined) return '';
-  return due == null
-    ? `這齣戲沒有設定${dayType === 'holiday' ? '假日' : '平日'}訂金`
-    : `應收 NT$ ${due}（${type}）`;
-}
-
-function depositWarning(deposit, cost) {
-  if (cost == null || !deposit) return '';
-  if (deposit > cost) return '超收訂金';
-  if (deposit < cost) return '訂金不足額';
-  return '';
-}
-
-function depositLine(item) {
-  // booking_cost 是這一筆的應收（後端依場次類型取好的）。類型寫在前面：
-  // 應收是看它決定的，看到 700 才知道為什麼不是劇本上寫的 500。
-  const type = DAY_TYPE_LABEL[item.day_type];
-  const warn = depositWarning(item.deposit, item.booking_cost);
-  const base = `${type ? `${type} · ` : ''}訂金 ${item.deposit} / ${item.booking_cost ?? '—'}`;
-  return warn ? `${base}（${warn}）` : base;
-}
