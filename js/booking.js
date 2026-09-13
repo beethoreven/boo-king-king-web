@@ -3,9 +3,12 @@
  *
  * 互動規則（依先前討論定案）：
  *   - 選了劇本，下面才顯示其他區塊
- *   - 選了主持人才打 API 驗證是否撞期
- *   - 同一個選項重選同一個值，直接沿用上次的錯誤，不重打 API
  *   - 選單類錯誤用 toast + 欄位紅色驚嘆號；送出前的彙總用對話框
+ *
+ * ★ 這家店沒有「選主持人」這一段：只有一位主持人，由後端依 functions
+ *   表填進去。撞期仍然會擋（主持人同一時間只能帶一場），但那是後端在
+ *   /slot 回的 has_conflict，玩家看到的是「這個時段不能訂」，不是
+ *   「這個人不能選」。
  *
  * ★ 畫面骨架只建立一次，render() 從不重建 DOM，只同步值、文字與顯示與否。
  *
@@ -25,9 +28,6 @@ import { createCalendar } from './calendar.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl,
          dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
 import { getUser } from './auth.js';
-
-/** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
-const EMPTY_GMS = [null, null, null, null];
 
 // 時與分的下拉選項。分只給整點與半點——場次時間是以半小時為單位的約定，
 // 給 60 個選項只會讓人多滑。想打其他分鐘數的，用下面那排手動欄位。
@@ -204,26 +204,16 @@ export function createBookingView() {
     slotHint,
   ]);
 
-  // 主持人。角色的數量與名稱只在換劇本時才變，所以只有換劇本才重建這一段；
-  // 選了人之後只更新既有節點的值與錯誤文字，不重畫。
-  const gmList = el('div', { class: 'list' });
-  const gmSection = el('div', { class: 'section' }, [
-    el('div', { class: 'section__label' }, '選擇主持人'),
-    gmList,
-  ]);
-  let gmRows = [];          // [{ wrap, sel, errNode }]
-  let gmRowsBuiltFor = null; // 已經照哪一個 mmg id 建過
-
   const submitBtn = el('button', { class: 'btn btn--primary', onClick: submit }, '立即預約');
   const submitSection = el('div', { class: 'section', style: 'padding-bottom: 20px' }, [submitBtn]);
 
   // 劇本清單還沒回來之前顯示這個。骨架是持久節點、建構當下就掛上去了，
-  // 不擋著的話會先看到一個空的劇本選單加上「場次」「選擇主持人」等空區塊，
+  // 不擋著的話會先看到一個空的劇本選單加上「場次」等空區塊，
   // 那看起來像是載完了但沒有資料。
   const loadingNode = spinner();
 
   root.append(
-    loadingNode, scriptSection, tagSection, slotSection, gmSection,
+    loadingNode, scriptSection, tagSection, slotSection,
     el('div', { class: 'spacer' }), submitSection,
   );
 
@@ -236,24 +226,11 @@ export function createBookingView() {
     // 日期時間的真正來源是下排那五個欄位，state 只是它們的鏡像。
     // 存字串不存數字：使用者可能只打了一半（"20"），那不是 20 年。
     y: '', mo: '', d: '', h: '', mi: '',
-    gms: [...EMPTY_GMS],
-    gmErrors: [null, null, null, null],
-    // 已經驗證過的主持人選擇，避免重選同一個值又打一次 API。
-    // key 是 `${slot}:${userId}`，值是錯誤訊息或 null（代表驗證過沒問題）。
-    //
-    // ★ 鍵裡刻意不含時段——因為換時段時整份快取會被丟掉（見
-    //   checkedSlot）。若哪天改成保留跨時段的結果，鍵就必須帶上時段，
-    //   否則「A 主持人在 10:00 撞期」會被誤用到 14:00 上。
-    gmChecked: new Map(),
-    // 這份主持人檢查是針對哪一個時段做的。時段一換，先前的結果就不再
-    // 適用：撞期是「這個人在這段時間有沒有別的場」，換了時間答案可能
-    // 完全相反。
-    checkedSlot: '',
     slot: null,         // 該時段的排隊狀況
     loading: true,      // 劇本清單還在路上
     submitting: false,
     // 這次「送出預約」意圖的冪等鍵，只在真正送出時才產生（見 submit()）。
-    // 日期、時間、主持人任何一項改變，都代表變成另一次意圖，必須清成
+    // 日期或時間改變，都代表變成另一次意圖，必須清成
     // null 逼下次送出重新產生一組——否則會被後端的 ON CONFLICT 誤判成
     // 同一筆預約，改了日期卻建立/回傳的是改之前那筆。
     requestId: null,
@@ -371,34 +348,8 @@ export function createBookingView() {
   //   （不存在的日期），舊回應仍然把提示寫成「可進行預約」。
   let slotSeq = 0;
 
-  /**
-   * 時段變了就把主持人的選擇、錯誤與快取一起清掉，回傳有沒有真的清到東西。
-   *
-   * 不這樣做的話會留下騙人的畫面：在 10:00 選了撞期的主持人、看到紅字，
-   * 改成 14:00 之後那行紅字還在，而重選同一個人會命中快取、連 API 都不打，
-   * 於是紅字永遠不會消失——玩家會以為這位主持人怎麼樣都不能選。
-   *
-   * 選擇清空而不是自動重驗：重驗要為每一位已選的主持人各打一支 API，
-   * 而使用者換時間之後本來就常常會換人。讓他重選一次，每一次選擇都是
-   * 對「現在這個時段」問的，不會有過期的答案。
-   */
-  function resetGmsForNewSlot() {
-    const key = currentDate() && currentTime() ? `${currentDate()} ${currentTime()}` : '';
-    if (!key || key === state.checkedSlot) return false;
-    state.checkedSlot = key;
-
-    const had = state.gms.some((h) => h !== null);
-    state.gms = [...EMPTY_GMS];
-    state.gmErrors = [null, null, null, null];
-    state.gmChecked.clear();
-    return had;
-  }
-
   /** 日期時間齊全就去查該時段的排隊狀況。 */
   async function refreshSlot() {
-    if (resetGmsForNewSlot()) {
-      toast('時段已變更，請重新選擇主持人');
-    }
     syncHints();
     const seq = ++slotSeq;
     const date = currentDate();
@@ -444,10 +395,6 @@ export function createBookingView() {
     calendar.reset();
     hourPicker.value = '';
     minutePicker.value = '';
-    state.gms = [...EMPTY_GMS];
-    state.gmErrors = [null, null, null, null];
-    state.gmChecked.clear();
-    state.checkedSlot = '';
     state.slot = null;
   }
 
@@ -608,88 +555,6 @@ export function createBookingView() {
       : (times.length ? '' : '這一天未開放，請改選其他日期');
   }
 
-  // ── 主持人 ──────────────────────────────────────────────────
-
-  function buildGmRows(d) {
-    clear(gmList);
-    gmRows = [];
-    for (const gm of d.gm_slots) {
-      const sel = el('select', {
-        'aria-label': `選擇「${gm.name}」的主持人`,
-        onChange: (e) => pickGm(gm.slot - 1, e.target.value),
-      });
-      sel.append(el('option', { value: '' }, '未選擇'));
-      for (const h of gm.gms) sel.append(el('option', { value: h.id }, h.name));
-
-      const errNode = el('div', { class: 'field__error' });
-      const wrap = el('div', { class: 'field' }, [
-        el('div', { class: 'field__label' }, gm.name),
-        el('div', { class: 'select-wrap' }, sel),
-        errNode,
-      ]);
-      gmList.append(wrap);
-      gmRows.push({ wrap, sel, errNode, slotIndex: gm.slot - 1 });
-    }
-    gmRowsBuiltFor = d.id;
-  }
-
-  async function pickGm(slotIndex, value) {
-    const userId = value ? Number(value) : null;
-    state.requestId = null;
-    state.gms[slotIndex] = userId;
-
-    if (userId === null) {
-      state.gmErrors[slotIndex] = null;
-      render();
-      return;
-    }
-
-    // 重複指派同一個人：純字串比對，不用打 API
-    const duplicateAt = state.gms.findIndex((h, i) => i !== slotIndex && h === userId);
-    if (duplicateAt !== -1) {
-      state.gmErrors[slotIndex] = '請選擇不同的主持人';
-      toast('請選擇不同的主持人', { error: true });
-      render();
-      return;
-    }
-
-    // 這個選擇先前驗證過就直接沿用結果，不重打 API
-    const key = `${slotIndex}:${userId}`;
-    if (state.gmChecked.has(key)) {
-      const cached = state.gmChecked.get(key);
-      state.gmErrors[slotIndex] = cached;
-      if (cached) toast(cached, { error: true });
-      render();
-      return;
-    }
-
-    // 還沒填完日期時間就沒得驗證，等送出時後端會擋
-    const date = currentDate();
-    const time = currentTime();
-    if (!date || !time) {
-      state.gmErrors[slotIndex] = null;
-      render();
-      return;
-    }
-
-    try {
-      await api.get('/api/bookings/check-gm', {
-        mmg_id: state.mmgId,
-        session_date: date,
-        session_time: time,
-        user_id: userId,
-      });
-      state.gmChecked.set(key, null);
-      state.gmErrors[slotIndex] = null;
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : '主持人檢查失敗';
-      state.gmChecked.set(key, message);
-      state.gmErrors[slotIndex] = message;
-      toast(message, { error: true });
-    }
-    render();
-  }
-
   // ── 送出 ────────────────────────────────────────────────────
 
   /** 送出前的完整檢查，回傳錯誤訊息陣列。 */
@@ -709,21 +574,12 @@ export function createBookingView() {
     if (state.slot?.is_open === false) problems.push('此時間未開放');
     if (state.slot?.has_conflict) problems.push('本時段有衝突場次，請改選其他時間');
     if (state.slot?.is_full) problems.push('本時段已額滿');
-
-    for (const gm of state.detail?.gm_slots ?? []) {
-      if (state.gms[gm.slot - 1] === null) {
-        problems.push(`「${gm.name}」尚未選擇主持人`);
-      }
-    }
-    for (const err of state.gmErrors) {
-      if (err) problems.push(err);
-    }
     return problems;
   }
 
   async function submit() {
     // 排在所有檢查之前。沒有聯絡資料的話，表單填得多完整都訂不成——
-    // 先講一串「主持人沒選」再告訴他其實根本不能訂，是浪費他的時間。
+    // 先講一串「日期沒填」再告訴他其實根本不能訂，是浪費他的時間。
     // 後端也會擋（那是把關），這裡擋是為了讓他早點知道。
     if (!getUser()?.has_contact) {
       await alertDialog({
@@ -768,17 +624,19 @@ export function createBookingView() {
       //   否則玩家網路不穩重按一次就可能佔到兩個名額（名額有限且被搶）。
       //
       //   但「同一次意圖」不是「同一個 state 物件」——只要使用者在這之間
-      //   改了日期、時間或主持人，那就是另一筆預約，絕不能沿用舊的 id，
-      //   不然會被後端的 ON CONFLICT 誤判成同一筆，回傳/鎖住的是改之前
-      //   那個時段。所以 requestId 只存在這裡：readManualFields／pickGm／
-      //   resetBelowScript 任何一個都會先把它清成 null，逼這裡重新產生一組；
-      //   只有「什麼都沒改、單純重按送出」才會沿用。
+      //   改了日期或時間，那就是另一筆預約，絕不能沿用舊的 id，不然會被
+      //   後端的 ON CONFLICT 誤判成同一筆，回傳/鎖住的是改之前那個時段。
+      //   所以 requestId 只存在這裡：readManualFields 與 resetBelowScript
+      //   都會先把它清成 null，逼這裡重新產生一組；只有「什麼都沒改、
+      //   單純重按送出」才會沿用。
       if (!state.requestId) state.requestId = crypto.randomUUID();
       const result = await api.post('/api/bookings', {
         mmg_id: Number(state.mmgId),
         session_date: date,
         session_time: time,
-        gm_user_ids: state.gms,
+        // ★ 刻意不送 gm_user_ids。這家店只有一位主持人，由後端依
+        //   functions 表填進去（見後端 db/bookings.create_booking）——
+        //   前端連「有幾個角色」都不需要知道。
         request_id: state.requestId,
       });
       toast(result.already_existed ? '這筆預約先前已經成立' : `預約成功（${result.label}）`);
@@ -829,7 +687,6 @@ export function createBookingView() {
     if (state.loading) {
       tagSection.hidden = true;
       slotSection.hidden = true;
-      gmSection.hidden = true;
       submitSection.hidden = true;
       return;
     }
@@ -841,7 +698,6 @@ export function createBookingView() {
     tagSection.hidden = !show;
     slotSection.hidden = !show;
     submitSection.hidden = !show;
-    gmSection.hidden = !show || !d.gm_slots.length;
     if (!show) return;
 
     clear(tagRow);
@@ -868,16 +724,6 @@ export function createBookingView() {
 
     syncHints();
 
-    if (d.gm_slots.length && gmRowsBuiltFor !== d.id) buildGmRows(d);
-    for (const row of gmRows) {
-      const value = state.gms[row.slotIndex] ?? '';
-      if (row.sel.value !== String(value)) row.sel.value = value;
-      const err = state.gmErrors[row.slotIndex];
-      row.errNode.textContent = err ?? '';
-      row.errNode.hidden = !err;
-      row.wrap.className = `field${err ? ' field--error' : ''}`;
-    }
-
     submitBtn.disabled = state.submitting;
     submitBtn.textContent = state.submitting ? '送出中…' : '立即預約';
   }
@@ -897,8 +743,8 @@ function endTime(start, hours) {
 /**
  * 玩家看到的時段說明。
  *
- * 序位只對玩家有意義——主持人與管理員看到的是一份照時間排的清單，
- * 誰排第幾對他們不改變任何事。所以這段文字只在這個畫面出現。
+ * 序位只對玩家有意義——店家看到的是一份照時間排的清單，誰排第幾對
+ * 他不改變任何事。所以這段文字只在這個畫面出現。
  *
  * 已經有一組成立（booked）跟「大家都還在排隊」是兩件事，說法必須分開：
  * 前者代表這個時段實際上已經有人要開了，後面排的就是候補；後者只是
@@ -907,15 +753,16 @@ function endTime(start, hours) {
 function slotMessage(slot) {
   // 沒開放排在最前面。這個時段根本不在店家開放的範圍內，講「已額滿」或
   // 「有衝突」都是在描述一個不存在的場次——那兩句會讓人以為只要等一下
-  // 或改個主持人就有機會。
+  // 就有機會。
   if (slot.is_open === false) return '此時間未開放';
-  // 撞期排在其次：額滿還可以等別人取消，包廂被佔著是這個時間根本開不成。
-  // 兩者都成立時，先講那個改時間才能解決的。
+  // 撞期排在其次：額滿還可以等別人取消，主持人被佔著是這個時間根本
+  // 開不成（這家店只有一位主持人）。兩者都成立時，先講那個改時間才能
+  // 解決的。
   //
   // 刻意不寫是被什麼撞到。撞到的是別的客人的預約——演什麼、誰訂的、
   // 演到幾點，都不是這位玩家該知道的事。後端也只回一個布林值，不是
   // 前端拿到細節卻選擇不顯示（那樣打開開發者工具照樣看得到）。
-  // 管理員與主持人要處理衝突，他們的畫面有完整資訊。
+  // 店家要處理衝突，管理員介面有完整資訊。
   if (slot.has_conflict) return '本時段有衝突場次，請改選其他時間';
   // 容量 1 的時段沒有排隊這回事：講「已額滿」會讓人以為等別人取消就有機會，
   // 但這種時段沒有候補，就是被訂走了。後端 create_booking 用同一條規則。
