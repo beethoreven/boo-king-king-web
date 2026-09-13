@@ -123,9 +123,6 @@ const emptyMmg = () => ({
   ],
 });
 
-// 0=週日，跟後端 mmg_weekly_slot.weekday 與 JS 的 Date.getDay() 一致。
-const WEEKDAY_LABEL = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-
 /** 現在（本機時區，實務上就是台北），datetime-local 吃的格式。
  *  不含秒——秒對「幾點上架」沒有意義，顯示出來只會讓人讀不出用意。 */
 function nowISO() {
@@ -535,7 +532,7 @@ export function createAdminView({ tab, sub } = {}) {
           control: select({ options: MMG_STATUS_OPTIONS, value: m.status, onChange: (v) => { m.status = v; }, ariaLabel: '劇本狀態' }),
         }),
       ]),
-      el('div', { class: 'section__label', style: 'margin-top:8px' }, '開放預約的日期與時段'),
+      el('div', { class: 'section__label', style: 'margin-top:8px' }, '上架期間與公休日'),
       renderSchedule(m),
 
       el('div', { class: 'row', style: 'margin-top:8px' }, [
@@ -581,89 +578,58 @@ export function createAdminView({ tab, sub } = {}) {
   //   parse 成陣列再塞回去，會讓「10:」這種還沒打完的中間狀態被吃掉。
 
   /** 把後端來的 schedule 攤成畫面用的工作副本。 */
+  /**
+   * 把後端的排期攤成畫面用的工作副本。
+   *
+   * ★ 這家店是「預設全時段開放」（functions 表 schedule_mode=negative），
+   *   所以只有公休日這一種設定。後端在這個模式下完全不看每週常態那張表
+   *   （mmg_weekly_slot），畫面上給它一組勾選框只會讓店家花時間設定一份
+   *   不會生效的東西。
+   */
   function openSchedule(m) {
-    const weekly = m.schedule?.weekly ?? [];
     m._sched = {
-      days: WEEKDAY_LABEL.map((_label, wd) => {
-        const hit = weekly.find((w) => w.weekday === wd);
-        return { on: Boolean(hit), text: (hit?.times ?? []).join(', ') };
-      }),
-      exceptions: (m.schedule?.exceptions ?? []).map((e) => ({
-        date: e.date, is_open: e.is_open, text: (e.times ?? []).join(', '),
-      })),
+      closedDays: (m.schedule?.exceptions ?? [])
+        .filter((e) => !e.is_open)
+        .map((e) => ({ date: e.date })),
     };
     return m;
   }
 
-  /**
-   * 解析時段字串。回傳 { times, error }，error 非空就是格式不對。
-   *
-   * 接受：半形逗號分隔，逗號前後可以有空白——「10:00, 14:00」是標準的
-   * 英文寫法，把它判成錯誤只會讓人莫名其妙。
-   * 不接受：頓號、全形逗號、以及任何不是 HH:MM 的東西。錯誤訊息會指出
-   * 是哪一種，不要只說「格式錯誤」讓人自己猜。
-   */
-  function parseTimes(text) {
-    const raw = (text ?? '').trim();
-    if (!raw) return { times: [], error: '請至少填一個時段' };
-    if (/[、，]/.test(raw)) return { times: [], error: '請用半形逗號分隔，例如 10:00,14:00' };
-
-    const times = [];
-    for (const part of raw.split(',')) {
-      const t = part.trim();
-      if (!t) return { times: [], error: '有多餘的逗號' };
-      const m = /^(\d{1,2}):(\d{2})$/.exec(t);
-      if (!m) return { times: [], error: `「${t}」不是 HH:MM 格式` };
-      const h = Number(m[1]);
-      const mi = Number(m[2]);
-      if (h > 23 || mi > 59) return { times: [], error: `「${t}」超出範圍` };
-      const value = `${String(h).padStart(2, '0')}:${m[2]}`;
-      if (!times.includes(value)) times.push(value);
-    }
-    return { times: times.sort(), error: '' };
-  }
-
-  /** 整份排期的格式錯誤，回傳一個陣列（空的代表全部合法）。 */
+  /** 整份排期的錯誤，回傳一個陣列（空的代表全部合法）。 */
   function scheduleErrors(m) {
     const out = [];
-    m._sched.days.forEach((d, wd) => {
-      if (!d.on) return;
-      const { error } = parseTimes(d.text);
-      if (error) out.push(`${WEEKDAY_LABEL[wd]}：${error}`);
-    });
-    m._sched.exceptions.forEach((e) => {
-      if (!e.date) { out.push('特定日期有一列沒有填日期'); return; }
-      if (!e.is_open) return;
-      const { error } = parseTimes(e.text);
-      if (error) out.push(`${e.date}：${error}`);
+    const seen = new Set();
+    m._sched.closedDays.forEach((d) => {
+      if (!d.date) { out.push('公休日有一列沒有填日期'); return; }
+      // 同一天填兩次後端會擋（「同一個日期不能設定兩筆特例」），在這裡先
+      // 講清楚是哪一天，不然使用者拿到的是一句沒有指向的錯誤。
+      if (seen.has(d.date)) out.push(`${d.date} 填了兩次`);
+      seen.add(d.date);
     });
     return out;
   }
 
-  /** 工作副本轉回要送出去的形狀。 */
+  /**
+   * 工作副本轉回要送出去的形狀。
+   *
+   * weekly 永遠是空的：這個模式下後端不看那張表，送一份過去只會在資料庫
+   * 裡留下一組沒有人讀、卻看起來像設定的列。
+   *
+   * 每一筆例外都是 is_open:false ——後端在這個模式下會拒絕 is_open:true
+   * （不是忽略，是擋下來），所以這裡送別的值等於保證存檔失敗。
+   */
   function closeSchedule(m) {
     m.schedule = {
-      weekly: m._sched.days
-        .map((d, wd) => ({ weekday: wd, times: parseTimes(d.text).times }))
-        // 沒勾的星期就是沒有那一列，不是留一列空的——「不開」的表達
-        // 方式是不存在，見 db/schema.py 的 _ensure_schedule。
-        .filter((d, wd) => m._sched.days[wd].on && d.times.length),
-      exceptions: m._sched.exceptions
+      weekly: [],
+      exceptions: m._sched.closedDays
         .filter((e) => e.date)
-        .map((e) => ({
-          date: e.date, is_open: e.is_open,
-          times: e.is_open ? parseTimes(e.text).times : [],
-        })),
+        .map((e) => ({ date: e.date, is_open: false, times: [] })),
     };
     return m;
   }
 
   function renderSchedule(m) {
     const sc = m._sched;
-    const anyDay = sc.days.some((d) => d.on);
-    const configured = anyDay || sc.exceptions.length
-      || m.start_booking || m.end_booking;
-
     return el('div', { class: 'card card--flat', style: 'display:flex;flex-direction:column;gap:10px' }, [
       el('div', { class: 'row' }, [
         field({ label: '開放預約時間（必填）',
@@ -674,7 +640,7 @@ export function createAdminView({ tab, sub } = {}) {
             onChange: (e) => { m.end_booking = e.target.value || null; render(); } }) }),
       ]),
       el('div', { class: 'field__hint' },
-        '預約終止時間留空＝不打算終止。這是絕對外框，區間外就算設了特例日也不會開放'),
+        '預約終止時間留空＝不打算終止。這是絕對外框，區間外一律訂不到'),
       el('div', { class: 'field__hint' },
         '狀態設為「尚未上架」時，一到開放預約時間會自動轉成上架'),
       // ★ 終止時間到了「不會」自動下架，這是刻意的：有的店家不打算把戲收
@@ -686,30 +652,19 @@ export function createAdminView({ tab, sub } = {}) {
       !m.start_booking && el('div', { class: 'field__error' }, '開放預約時間不能空白'),
       listingOrderError(m) && el('div', { class: 'field__error' }, listingOrderError(m)),
 
-      el('div', { class: 'section__label', style: 'margin-top:4px' }, '每週開放時段'),
-      ...sc.days.map((d, wd) => renderWeekday(d, wd)),
-      el('div', { class: 'field__hint' },
-        '時段用半形逗號分隔，例如「10:00,14:00,19:00」。'),
-
-      el('div', { class: 'section__label', style: 'margin-top:4px' }, '特定日期'),
-      ...sc.exceptions.map((e, i) => renderException(m, e, i)),
+      el('div', { class: 'section__label', style: 'margin-top:4px' }, '公休日'),
+      ...sc.closedDays.map((e, i) => renderClosedDay(m, e, i)),
       el('button', {
         class: 'btn btn--ghost btn--small',
         style: 'align-self:flex-start',
-        onClick: () => {
-          sc.exceptions.push({ date: '', is_open: false, text: '' });
-          render();
-        },
-      }, '＋ 新增特定日期'),
+        onClick: () => { sc.closedDays.push({ date: '' }); render(); },
+      }, '＋ 新增公休日'),
+      el('div', { class: 'notice' },
+        '這齣戲平常每天都開，時段以半小時為單位（00:00 到 23:30）。'
+        + '列在上面的日子整天不開。'),
       el('div', { class: 'field__hint' },
-        '優先序高於每週設定，用來處理臨時公休或臨時加場'),
-
-      // 「還沒設定」跟「設定成全關」的結果看起來一樣，但意思完全不同，
-      // 所以要講出來——不然管理員會以為自己已經設好了。
-      !configured
-        ? el('div', { class: 'notice' }, '尚未設定任何排期，這齣戲目前不限制日期與時間')
-        : (!anyDay && el('div', { class: 'notice' },
-            '沒有勾選任何星期，代表常態全部關閉，只有下面列出的特定日期才開放')),
+        '不必為了「那天我有別的場」而設公休——同一個時間已經有場次時，'
+        + '系統本來就不會再讓人訂走。'),
     ].filter(Boolean));
   }
 
@@ -720,94 +675,24 @@ export function createAdminView({ tab, sub } = {}) {
       ? '預約終止時間必須晚於開放預約時間' : '';
   }
 
-  function renderWeekday(d, wd) {
-    const errNode = el('div', { class: 'field__error', hidden: true });
-    const showError = () => {
-      const msg = d.on ? parseTimes(d.text).error : '';
-      errNode.textContent = msg;
-      errNode.hidden = !msg;
-    };
-    const input = el('input', {
-      type: 'text',
-      value: d.text,
-      placeholder: '10:00,14:00',
-      disabled: !d.on,
-      'aria-label': `${WEEKDAY_LABEL[wd]}的開放時段`,
-      // 打字不重繪，理由同主持人角色名稱：重繪會把這個輸入框卸下來，
-      // 焦點跟注音組字都會消失。錯誤紅字直接改文字節點。
-      onInput: (e) => { d.text = e.target.value; showError(); },
-    });
-    const box = el('input', {
-      type: 'checkbox',
-      checked: d.on,
-      'aria-label': `${WEEKDAY_LABEL[wd]}是否開放`,
-      // 直接改這一列的節點，不呼叫 render()——旁邊可能有別的時段輸入框
-      // 正在被編輯，整頁重繪會把那一格的焦點也一起弄掉。
-      onChange: (e) => {
-        d.on = e.target.checked;
-        input.disabled = !d.on;
-        row.classList.toggle('is-off', !d.on);
-        showError();
-      },
-    });
-    const row = el('div', {
-      class: `row${d.on ? '' : ' is-off'}`,
-      style: 'align-items:center;gap:10px',
-    }, [
-      el('label', { style: 'display:flex;align-items:center;gap:6px;min-width:76px' },
-        [box, WEEKDAY_LABEL[wd]]),
-      input,
-    ]);
-    // 一開啟就把既有內容驗一次，不要等使用者去動它才發現有問題。
-    showError();
-    return el('div', {}, [row, errNode]);
-  }
-
-  function renderException(m, e, i) {
-    const errNode = el('div', { class: 'field__error', hidden: true });
-    const showError = () => {
-      const msg = e.is_open ? parseTimes(e.text).error : '';
-      errNode.textContent = msg;
-      errNode.hidden = !msg;
-    };
-    const input = el('input', {
-      type: 'text',
-      value: e.text,
-      placeholder: '10:00,14:00',
-      disabled: !e.is_open,
-      'aria-label': '這一天的開放時段',
-      onInput: (ev) => { e.text = ev.target.value; showError(); },
-    });
-    // ★ 兩行，不是一行。四個控制項擠一行時，「開放／不開放」那個下拉會
-    //   被壓到只剩一個箭頭——那一格正是這一列在講的事，看不見等於整列
-    //   讀不懂。時段字串又可能很長（10:00,14:00,19:00），更擠不下。
-    //   特例本來就不會有很多列，多一行換到看得懂，很划算。
-    const topRow = el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
+  /**
+   * 一列公休日。只有日期，沒有「開放／不開放」也沒有時段。
+   *
+   * ★ 這家店的例外層**只能關**（後端 set_rules 在 negative 模式會拒絕
+   *   is_open:true，不是忽略）。所以這裡不給那個下拉——給了就是給一個
+   *   選下去必定存檔失敗的選項。
+   */
+  function renderClosedDay(m, e, i) {
+    return el('div', { class: 'row', style: 'align-items:center;gap:8px' }, [
       el('input', {
-        type: 'date', value: e.date, 'aria-label': '特定日期',
+        type: 'date', value: e.date, 'aria-label': '公休日',
         onChange: (ev) => { e.date = ev.target.value; },
       }),
-      el('div', { class: 'select-wrap exc__mode' }, select({
-        options: [{ value: 'closed', label: '不開放' }, { value: 'open', label: '開放' }],
-        value: e.is_open ? 'open' : 'closed',
-        onChange: (v) => {
-          e.is_open = v === 'open';
-          input.disabled = !e.is_open;
-          // 不開放的那一天沒有時段可言，把整行收起來而不是留一個
-          // 停用的輸入框佔位——留著會讓人以為那裡還需要填點什麼。
-          timeRow.hidden = !e.is_open;
-          showError();
-        },
-        ariaLabel: '這一天開不開放',
-      })),
       el('button', {
-        class: 'btn btn--ghost btn--small exc__remove',
-        onClick: () => { m._sched.exceptions.splice(i, 1); render(); },
+        class: 'btn btn--ghost btn--small',
+        onClick: () => { m._sched.closedDays.splice(i, 1); render(); },
       }, '移除'),
     ]);
-    const timeRow = el('div', { class: 'exc__times', hidden: !e.is_open }, input);
-    showError();
-    return el('div', { class: 'exc' }, [topRow, timeRow, errNode]);
   }
 
   // ── 使用者管理 ──────────────────────────────────────────
