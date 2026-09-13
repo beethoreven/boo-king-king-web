@@ -11,7 +11,6 @@
 
 import { api } from './api.js';
 import { el, clear, field, toast, spinner, scriptName, asyncLink} from './ui.js';
-import { showGms } from './gms-dialog.js';
 import { setRouteTab, slugs, slugGap, slugGapNode, STATUS_SLUG,
          newInstance } from './route.js';
 
@@ -165,12 +164,6 @@ export function createMyBookingsView({ tab } = {}) {
         el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
         el('div', { class: 'list-item__meta' },
           `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`),
-        el('div', { class: 'list-item__meta' },
-          item.gm_names.length
-            // 點開才看得到「誰、確認了沒」。列在這裡只有名字，而玩家真正
-            // 想知道的是自己這場成立了沒——那要看確認狀態。
-            ? asyncLink('主持', () => showGms(item.id))
-            : '尚未指定主持人'),
         // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
         // 是在講一件已經不會發生的事。
         !['ended', 'cancelled'].includes(item.status)

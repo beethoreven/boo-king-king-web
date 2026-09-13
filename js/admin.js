@@ -10,7 +10,6 @@ import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink,
          dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
 import { adminMaySave } from './conflicts.js';
-import { showGms } from './gms-dialog.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
          STATUS_SLUG, newInstance } from './route.js';
 
@@ -87,9 +86,11 @@ const MMG_STATUS_OPTIONS = [
   { value: 'inactive', label: '下架' },
 ];
 
+// ★ 沒有「待主持確認」與「待收訂金」：這家店只有一位主持人、建立時就
+//   視為已確認（gm_mode=single），而且不收訂金（deposit=off），那兩個
+//   狀態推導不出來。留在選單裡的話，管理員手動選下去會把一筆預約推進
+//   一個沒有任何操作能離開的狀態。
 const BOOKING_STATUS_OPTIONS = [
-  { value: 'gm_confirm', label: '待主持確認' },
-  { value: 'gm_reviewed', label: '待收訂金' },
   { value: 'booked', label: '已成立' },
   { value: 'ended', label: '已結束' },
   { value: 'cancelled', label: '已取消' },
@@ -1123,10 +1124,7 @@ export function createAdminView({ tab, sub } = {}) {
         el('div', { class: 'list-item__main' }, [
           el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
           el('div', { class: 'list-item__meta' }, [
-            `${item.session_date} ${item.session_time} · ${item.player_name} · `,
-            // 只寫「主持」而不列人名：一場最多四個角色，列出來會把這一行
-            // 撐爆，而且真正要看的是「確認了沒」，那在對話框裡。
-            asyncLink('主持', () => showGms(item.id)),
+            `${item.session_date} ${item.session_time} · ${item.player_name}`,
           ]),
           el('div', { class: 'list-item__meta' }, depositLine(item)),
         ]),

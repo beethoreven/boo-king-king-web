@@ -17,7 +17,6 @@ import { refreshStatus, logout, getUser, hasRole, renderGoogleButton,
          getPendingRegistration, getBlockedStatus } from './auth.js';
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
-import { createGmView } from './gm.js';
 import { createAdminView } from './admin.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
@@ -39,7 +38,6 @@ if (!SITE_NAME) throw new Error('index.html 沒有填 __BOO_KING_KING_SITE_NAME_
 
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
-  gm: { label: '主持人介面', minRole: 2, build: (route) => createGmView(route) },
   admin: { label: '管理員介面', minRole: 1, build: (route) => createAdminView(route) },
   // 選單裡的頁面。不放進頂欄的切換按鈕，所以 minRole 只是形式上的下限。
   profile: {
@@ -68,7 +66,6 @@ const VIEWS = {
  */
 const VIEW_SLUG = {
   booking: 'booking',   // 是預設值，實際上不會寫進網址（見 route.js）
-  gm: 'gm',
   admin: 'admin',
   profile: 'account',
   mybookings: 'mybookings',
