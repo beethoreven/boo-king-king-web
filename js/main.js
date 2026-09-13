@@ -78,6 +78,25 @@ function brandIcon() {
   return el('img', { class: 'topbar__mark', src: 'brand-mark.png', alt: '', 'aria-hidden': 'true' });
 }
 
+/**
+ * 左上角的品牌區塊。有登入時它是一顆按鈕，點了回到預約畫面——那是這個站
+ * 的首頁，也是唯一一個每個人都到得了的畫面。
+ *
+ * ★ 其餘三種情況維持成純文字，不是漏做：登入畫面、註冊畫面、停權畫面
+ *   都到不了預約畫面，做成按鈕只會讓人點了沒反應，那比不能點更糟。
+ */
+function brandBlock({ toHome = false } = {}) {
+  const parts = [brandIcon(), '步經徑'];
+  if (!toHome) return el('div', { class: 'topbar__brand' }, parts);
+  return el('button', {
+    class: 'topbar__brand topbar__brand--home',
+    type: 'button',
+    // 按鈕裡的字是店名，唸出來不會知道它會做什麼，所以另外給一個名字。
+    'aria-label': '回到預約畫面',
+    onClick: () => switchView('booking'),
+  }, parts);
+}
+
 // 目前打開的那個選單面板，以及「點別的地方就收起來」的監聽器。
 //
 // 綁在 document 上而不是遮罩層：遮罩會擋住底下的內容，而這個選單小到不需要
@@ -211,7 +230,7 @@ function renderTopbar() {
   }
 
   return el('div', { class: 'topbar' }, [
-    el('div', { class: 'topbar__brand' }, [brandIcon(), '步經徑']),
+    brandBlock({ toHome: Boolean(user) }),
     el('div', { class: 'topbar__actions' }, actions),
   ]);
 }
@@ -342,7 +361,7 @@ function renderRegister() {
   clear(app);
   app.append(
     el('div', { class: 'topbar' }, [
-      el('div', { class: 'topbar__brand' }, [brandIcon(), '步經徑']),
+      brandBlock(),
       el('div', { class: 'topbar__actions' }, [
         // 取消 = 登出。表單填一半不想註冊了，該回到登入頁，
         // 而不是留著一張半吊子的 session。
@@ -413,7 +432,7 @@ function renderBlocked() {
   clear(app);
   app.append(
     el('div', { class: 'topbar' }, [
-      el('div', { class: 'topbar__brand' }, [brandIcon(), '步經徑']),
+      brandBlock(),
       el('div', { class: 'topbar__actions' }, [userMenu()]),
     ]),
     // toast 三秒就消失，而這是這位使用者畫面上唯一的解釋——晚幾秒看

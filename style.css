@@ -80,6 +80,22 @@ a:hover { color: #e0b478; }
   letter-spacing: -0.01em;
 }
 
+/* 有登入時品牌區塊是一顆「回到預約畫面」的按鈕。
+
+   這裡只歸零瀏覽器自己加上去的東西（背景、外框、內距、字體），
+   **不碰 font-size / font-weight / letter-spacing**——那三個由上面的
+   .topbar__brand 明確設定，在這裡用 font 簡寫重設會把它們一起蓋掉，
+   按鈕版跟純文字版就長得不一樣了。 */
+.topbar__brand--home {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.topbar__brand--home:hover { color: var(--accent); }
+
 .topbar__actions { display: flex; align-items: center; gap: 8px; }
 
 .section {
