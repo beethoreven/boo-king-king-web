@@ -619,6 +619,9 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   text-align: left;
   background: none;
   border: none;
+  /* 這個 class 同時給 <button> 與 <a> 用（選單裡有連出去的項目）。
+     底線與 a 的預設顏色都要收掉，兩種標籤才長得一模一樣。 */
+  text-decoration: none;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
   font-family: inherit;

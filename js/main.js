@@ -99,33 +99,52 @@ function closeMenu() {
 
 document.addEventListener('click', closeMenu);
 
+function menuButton(label, onClick) {
+  return el('button', {
+    class: 'menu__item',
+    onClick: () => { closeMenu(); onClick(); },
+  }, label);
+}
+
+/**
+ * 選單裡連出去的項目。刻意用真的 <a> 而不是按鈕加 window.open：中鍵開新
+ * 分頁、右鍵複製網址、長按預覽，這些是瀏覽器本來就會做的事，換成按鈕之後
+ * 會全部消失，而且不會有任何錯誤訊息——使用者只會覺得這個連結怪怪的。
+ */
+function menuLink(label, href) {
+  return el('a', {
+    class: 'menu__item',
+    href,
+    target: '_blank',
+    rel: 'noopener',
+    onClick: () => closeMenu(),
+  }, label);
+}
+
 /**
  * 右上角的使用者選單。
  *
  * 「主持人介面」「管理員介面」刻意留在外面當獨立按鈕：那是切換工作區域，
  * 跟「我的帳號」是兩回事，混在同一個選單裡會讓管理員每次切換都多兩步。
  *
- * 被停權的人只會拿到「登出」——他什麼都做不了，選單裡放著點不動的項目
- * 只是讓他反覆確認自己被擋住。
+ * 被停權的人只拿得到「使用者條款」與「登出」——其餘他都做不了，選單裡
+ * 放著點不動的項目只是讓他反覆確認自己被擋住。條款留著是刻意的：被擋住
+ * 的人最需要看得到規則寫什麼。
  */
 function userMenu() {
   const user = getUser();
   const items = [];
 
   if (user) {
-    items.push(['使用者資料', () => switchView('profile')]);
-    items.push(['我預定的場次', () => switchView('mybookings')]);
+    items.push(menuButton('使用者資料', () => switchView('profile')));
+    items.push(menuButton('我預定的場次', () => switchView('mybookings')));
   }
-  items.push(['登出', async () => { await logout(); start(); }]);
+  // 條款排在登出上面：登出是這個選單的終點，在它後面再放東西會讓人多找
+  // 一次。不分登入狀態一律顯示。
+  items.push(menuLink('使用者條款', 'terms.html'));
+  items.push(menuButton('登出', async () => { await logout(); start(); }));
 
-  const panel = el('div', { class: 'menu__panel', hidden: true },
-    items.map(([label, onClick]) =>
-      el('button', {
-        class: 'menu__item',
-        onClick: () => { closeMenu(); onClick(); },
-      }, label),
-    ),
-  );
+  const panel = el('div', { class: 'menu__panel', hidden: true }, items);
 
   const toggle = el('button', {
     class: 'btn btn--ghost btn--small menu__toggle',
