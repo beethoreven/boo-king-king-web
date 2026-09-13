@@ -53,7 +53,7 @@ export function createMyBookingsView({ tab } = {}) {
   };
 
 
-  // 過期的回應不要蓋掉比較新的結果——理由與寫法見 gm.js 的同一段。
+  // 過期的回應不要蓋掉比較新的結果——理由與寫法見 admin.js 的同一段。
   const claim = (slot) => (slot.seq = (slot.seq ?? 0) + 1);
   const stale = (slot, mine) => mine !== slot.seq;
 

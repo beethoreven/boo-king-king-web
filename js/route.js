@@ -134,7 +134,7 @@ export function newInstance() {
  * 只換頁籤，畫面不動。**會一併清掉 sub**——子頁籤是依附在頁籤底下的，
  * 換了頁籤之後舊的 sub 就沒有意義了。
  *
- * viewSlug 是呼叫端自己屬於哪個畫面（gm.js 永遠是 'gm'，以此類推）；
+ * viewSlug 是呼叫端自己屬於哪個畫面（admin.js 永遠是 'admin'，以此類推）；
  * instance 是它建立時領到的號碼（見 newInstance）。
  */
 export function setRouteTab(viewSlug, tab, instance) {
