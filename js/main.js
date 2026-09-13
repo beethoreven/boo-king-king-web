@@ -26,6 +26,17 @@ import { readRoute, pushRoute, replaceRoute, onRouteChange, slugs, assertSlugs }
 
 const app = document.getElementById('app');
 
+/**
+ * 店名。由 index.html 填入——那個檔案是「每家店不一樣」的那一份設定，
+ * js/ 底下的每一支在所有 branch 上都應該完全相同。
+ *
+ * ★ 沒設就讓整個模組載不起來，不要退回「未命名」之類的預設值：畫面上
+ *   出現一個怪名字，沒有人會認為那是設定漏填，只會以為介面就長這樣。
+ *   同一個理由見下面 assertSlugs 那一段。
+ */
+const SITE_NAME = window.__BOO_KING_KING_SITE_NAME__;
+if (!SITE_NAME) throw new Error('index.html 沒有填 __BOO_KING_KING_SITE_NAME__');
+
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
   gm: { label: '主持人介面', minRole: 2, build: (route) => createGmView(route) },
@@ -86,7 +97,7 @@ function brandIcon() {
  *   都到不了預約畫面，做成按鈕只會讓人點了沒反應，那比不能點更糟。
  */
 function brandBlock({ toHome = false } = {}) {
-  const parts = [brandIcon(), '步經徑'];
+  const parts = [brandIcon(), SITE_NAME];
   if (!toHome) return el('div', { class: 'topbar__brand' }, parts);
   return el('button', {
     class: 'topbar__brand topbar__brand--home',
@@ -424,7 +435,7 @@ function renderBlocked() {
       // 不要編一個時間出來，直接說沒有期限。
       : '因異常行為停權，未設定解除期限');
     lines.push('若有誤判請聯繫管理員');
-    if (blocked.adminName) lines.push(`步經徑管理員為${blocked.adminName}`);
+    if (blocked.adminName) lines.push(`${SITE_NAME}管理員為${blocked.adminName}`);
   } else {
     lines.push('此帳號未獲授權，請聯絡店家');
   }
