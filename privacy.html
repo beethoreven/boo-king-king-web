@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>隱私權政策 — 步經徑</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <!-- 沿用同一份設計 token，配色與字級才不會跟主畫面各走各的。
+       但這一頁刻意不載任何 JS：它只是文字，不需要登入、不需要 API，
+       也就不該因為那些東西壞掉而看不到。
+
+       ★ 這一頁是 Google OAuth 同意畫面上的「隱私權政策」連結，發佈正式版的
+         前提是這個網址連得到。內容如果改了，記得同步更新頁尾的日期。 -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="topbar__brand">
+        <img class="topbar__mark" src="brand-mark.png" alt="" aria-hidden="true">步經徑
+      </div>
+    </div>
+
+    <div class="view">
+      <div class="section" style="padding-top:32px">
+        <h1 style="font-size:20px;font-weight:700;margin:0">隱私權政策</h1>
+      </div>
+
+      <div class="section">
+        <div class="card card--flat doc">
+          <h2>這份政策適用於哪裡</h2>
+          <p>本政策說明步經徑的場次預約系統（以下稱「本系統」）如何處理你的個人資料。
+             你在本系統建立帳號、預約場次時，適用本政策。</p>
+
+          <h2>我們收集哪些資料</h2>
+          <p><strong>透過 Google 登入取得的：</strong></p>
+          <ul>
+            <li><strong>只有電子郵件地址</strong>，而且必須是 Google 已驗證過的。
+                我們不向 Google 取得你的姓名、大頭貼或任何其他資料。</li>
+          </ul>
+          <p><strong>你自己填寫的：</strong></p>
+          <ul>
+            <li>稱呼、LINE ID、電話。用途是店家在場次前後與你聯繫。</li>
+          </ul>
+          <p><strong>你使用服務時產生的：</strong></p>
+          <ul>
+            <li>預約紀錄：劇本、日期、時段、備註與目前狀態。</li>
+            <li>登入憑證：一組隨機字串與你的電子郵件。閒置 90 天後失效，
+                過期的每週自動清除。</li>
+            <li>異常紀錄：當請求格式異常或過於頻繁時，記下你的帳號編號與累計點數。
+                <strong>不記錄請求的內容</strong>。點數每週自動減 1。</li>
+          </ul>
+
+          <h2>我們不收集的東西</h2>
+          <ul>
+            <li><strong>IP 位址</strong>——本系統任何一處都沒有儲存。</li>
+            <li><strong>付款資料</strong>——本系統不經手任何金流。</li>
+            <li>瀏覽行為分析、廣告追蹤。</li>
+            <li><strong>本站不設定任何 cookie。</strong>登入憑證存放在你瀏覽器的
+                localStorage，登出或刪除瀏覽器資料即消失。（登入按鈕由 Google 提供，
+                Google 可能依其自身政策設定 cookie，那不在我們的控制範圍內。）</li>
+          </ul>
+
+          <h2>誰看得到你的資料</h2>
+          <ul>
+            <li><strong>店家管理員</strong>：帳號資料與全部預約紀錄。</li>
+            <li><strong>主持人</strong>：他自己帶的那些場次，以及該場次預定者的聯絡方式。</li>
+            <li><strong>其他玩家</strong>：看不到你的任何資料。</li>
+          </ul>
+
+          <h2>我們把資料放在哪、交給誰處理</h2>
+          <div class="doc__scroll">
+            <table>
+              <tr><th>服務</th><th>用途</th><th>會接觸到什麼</th></tr>
+              <tr><td>Google</td><td>登入驗證</td>
+                  <td>由 Google 簽發身分憑證，我們只讀取其中的電子郵件</td></tr>
+              <tr><td>Brevo</td><td>寄送通知信</td><td>收件者的電子郵件與稱呼</td></tr>
+              <tr><td>Neon</td><td>資料庫</td><td>上述全部資料（機房位於新加坡）</td></tr>
+              <tr><td>Render</td><td>後端主機</td><td>處理中的請求（機房位於新加坡）</td></tr>
+              <tr><td>Cloudflare</td><td>網頁檔案</td><td>網頁本身，不含個人資料</td></tr>
+            </table>
+          </div>
+          <p>除上述為了提供服務所必要的委外處理之外，我們不會將你的資料出售、
+             出租或提供給第三方，除非法律另有要求。</p>
+
+          <h2>保存多久</h2>
+          <ul>
+            <li>帳號與預約紀錄：帳號存續期間持續保存。</li>
+            <li>登入憑證：閒置 90 天後失效並清除。</li>
+            <li>異常點數：每週自動減 1，歸零後不再影響你。</li>
+          </ul>
+
+          <h2>刪除帳號</h2>
+          <p>你可以在「使用者資料」頁自行刪除帳號。刪除時：</p>
+          <ul>
+            <li>稱呼、LINE ID、電話會被清空。</li>
+            <li><strong>電子郵件地址會保留</strong>。這是刻意的：若一併刪除，
+                被停權的帳號只要刪除後重新註冊就能規避停權。</li>
+            <li>尚未成立的預約會一併取消。</li>
+            <li>還有<strong>已成立</strong>的場次時無法刪除帳號——那是店家可能已經
+                備料的場次。請先與店家聯繫。</li>
+          </ul>
+
+          <h2>你的權利</h2>
+          <p>你可以隨時在「使用者資料」頁查詢與修改自己的資料，或如上刪除帳號。
+             其他關於個人資料的請求（查詢、更正、停止處理等），請來信聯絡。</p>
+
+          <h2>本政策的修改</h2>
+          <p>本政策如有修改，會更新本頁下方的最後更新日期。</p>
+
+          <h2>聯絡方式</h2>
+          <p>beethoreven@gmail.com</p>
+
+          <p class="doc__updated">最後更新：2026 年 9 月 13 日</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

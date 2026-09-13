@@ -633,6 +633,29 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 .menu__item:last-child { border-bottom: none; }
 .menu__item:hover { background: var(--surface-2); color: var(--accent); }
 
+/* ── 純文字文件頁（terms.html / privacy.html）────────────────────
+   這兩頁不載任何 JS、也不用介面裡的元件，樣式集中在這一段。
+
+   ★ 它們同時是 Google OAuth 同意畫面上的「服務條款」與「隱私權政策」
+     連結，發佈正式版的前提是這兩個網址在**未登入、沒有 JS** 的情況下
+     也讀得到。所以不要把它們改成需要登入或需要 JS 的畫面。 */
+.doc { font-size: 14px; line-height: 1.9; color: var(--ink-soft); }
+.doc h2 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 28px 0 8px; }
+.doc h2:first-of-type { margin-top: 0; }
+.doc p { margin: 0 0 12px; }
+.doc ul { margin: 0 0 12px; padding-left: 20px; }
+.doc li { margin: 0 0 6px; }
+.doc strong { color: var(--ink); font-weight: 500; }
+.doc table { width: 100%; border-collapse: collapse; margin: 0 0 12px; }
+.doc th, .doc td {
+  text-align: left; vertical-align: top; padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.doc th { color: var(--ink); font-weight: 500; white-space: nowrap; }
+/* 表格在窄畫面會超出去，讓它自己橫向捲，不要把整頁撐寬。 */
+.doc__scroll { overflow-x: auto; }
+.doc__updated { font-size: 13px; color: var(--ink-faint); margin: 32px 0 0; }
+
 /* 破壞性動作的按鈕。紅底白字——它跟旁邊那顆「編輯」的後果不是同一個
    量級，長得一樣會被順手按到。 */
 .btn--danger { background: var(--danger); color: #fff; }

@@ -139,9 +139,14 @@ function userMenu() {
     items.push(menuButton('使用者資料', () => switchView('profile')));
     items.push(menuButton('我預定的場次', () => switchView('mybookings')));
   }
-  // 條款排在登出上面：登出是這個選單的終點，在它後面再放東西會讓人多找
-  // 一次。不分登入狀態一律顯示。
+  // 兩份文件排在登出上面：登出是這個選單的終點，在它後面再放東西會讓人
+  // 多找一次。不分登入狀態一律顯示。
+  //
+  // ★ 這兩頁同時也是 Google OAuth 同意畫面要求的「服務條款」與「隱私權
+  //   政策」連結，發佈正式版的前提是那兩個網址連得到。所以它們是獨立的
+  //   靜態頁，不是這套介面裡的一個 view。
   items.push(menuLink('使用者條款', 'terms.html'));
+  items.push(menuLink('隱私權政策', 'privacy.html'));
   items.push(menuButton('登出', async () => { await logout(); start(); }));
 
   const panel = el('div', { class: 'menu__panel', hidden: true }, items);
