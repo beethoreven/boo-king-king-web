@@ -79,8 +79,8 @@ let currentView = 'booking';
  * 頂欄的品牌圖，來源是 brand-mark.png。
  *
  * 要換圖就直接覆蓋那個檔案，這裡不用動——尺寸與對齊都由 CSS 的
- * .topbar__mark 決定。圖請做成透明背景：頂欄是 #14120F 的深色，
- * 白底方塊會很突兀。
+ * .topbar__mark 決定。頂欄是白底，所以圖有沒有透明背景都可以；
+ * 目前這張冰淇淋是**刻意**帶著粉紅底的（案主確認）。
  */
 function brandIcon() {
   return el('img', { class: 'topbar__mark', src: 'brand-mark.png', alt: '', 'aria-hidden': 'true' });

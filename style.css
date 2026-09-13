@@ -1,40 +1,57 @@
 /*
  * 設計 token 與共用元件樣式。
  *
- * 配色來自設計稿定案的方向：深色底 + 黃銅色點綴（C 的結構 + B 的配色）。
+ * 這家店是**淺色 only**（2026-09-11 定案）。色值取樣自《豪門驚情系列》
+ * 的 Notion 站，主彩是深棕；步經徑那份深底黃銅換了一個底重新打光——
+ * 同一個色系家族，明暗翻過來。
+ *
+ * 沒有 prefers-color-scheme 分支，是刻意的：雙主題要每個顏色兩套、
+ * color-scheme 跟著切、陰影也要兩套，而這裡要的是換底不是加一個模式。
+ *
  * 所有顏色一律走這裡的變數，不要在別處寫死色碼——之後要調色只改這一區。
  */
 
 :root {
-  --bg: #14120f;
-  --surface: #1e1b17;      /* 卡片、彈起的區塊 */
-  --surface-2: #1a1713;    /* 輸入框等比背景略亮一階的表面 */
-  --border: #332d24;
-  --border-soft: #2a251e;
+  --bg: #ffffff;
+  --surface: #ffffff;      /* 卡片、彈起的區塊 */
+  --surface-2: #faf9f8;    /* 輸入框等比背景略暗一階的表面 */
+  --border: #e6e5e3;
+  --border-soft: #f1f0ee;
 
-  --ink: #ede8e0;
-  --ink-soft: #a79c8e;
-  --ink-faint: #8a8177;
-  --ink-disabled: #5c564c;
+  --ink: #2c2c2b;
+  --ink-soft: #6b6a67;
+  --ink-faint: #9b9a97;
+  --ink-disabled: #c4c3c0;
 
-  --accent: #c8975a;
-  --accent-soft: #2a2318;  /* 標籤底色 */
-  --on-accent: #14120f;
+  /* 深棕。--on-accent 是「放在 accent 底色上的字」，用淺米——那是取樣站
+     「民國」標籤的配色翻過來（原本淺米底深棕字），對比 6.0 : 1。
+     ★ 淺米字只能出現在深色底上：放在白底只有 1.3 : 1，等於看不見。
+       所以有色文字一律用 --accent，不要用 --on-accent。 */
+  --accent: #655121;
+  --accent-soft: rgba(33, 27, 23, .05);   /* 極淡的灰，不是棕 */
+  --on-accent: #f2e3b7;
 
-  --danger: #d9705a;
-  --danger-soft: #2e1c17;
+  --danger: #cf5148;
+  --danger-soft: rgba(207, 81, 72, .08);
+
+  /* 小標籤：灰底紅字。取樣站上最有辨識度的元素就是這個配色（日期與
+     地點標籤），所以標籤獨立成一組 token，不跟 accent 共用——之後調
+     主彩不會連帶把標籤也改掉。 */
+  --tag: #cf5148;
+  --tag-soft: rgba(33, 27, 23, .05);
 
   --radius: 10px;
   --radius-sm: 6px;
   --pad: 18px;
 
-  /* 告訴瀏覽器這一頁是深色的，讓它用深色版本畫「原生控制項」——
+  /* 告訴瀏覽器這一頁是淺色的，讓它用淺色版本畫「原生控制項」——
      數字欄位的上下箭頭、日期欄位的月曆圖示與跳出來的月曆面板、
      捲軸。這些是瀏覽器自己畫的，CSS 碰不到：
      ::-webkit-inner-spin-button 之類的偽元素不吃 color，硬改只能
-     整個藏起來。不設這一行的話它們一律照淺色模式畫，在深底上就是
-     白色方塊配深色箭頭，跟整個介面打架。 */
-  color-scheme: dark;
+     整個藏起來。
+     ★ 這一行漏掉的話症狀特別難查：白底介面上會跳出**深色的月曆面板**
+       與深色捲軸，而你翻遍 CSS 都找不到是哪一條造成的。 */
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -51,7 +68,7 @@ body {
 }
 
 a { color: var(--accent); }
-a:hover { color: #e0b478; }
+a:hover { color: #4a3b18; }   /* accent 壓深一階。白底上往亮走＝對比變差 */
 
 /* ── 版面 ───────────────────────────────────────────────── */
 
@@ -170,7 +187,7 @@ input[type="date"], input[type="time"], input[type="url"], textarea {
 
 select:disabled, input:disabled, textarea:disabled {
   color: var(--ink-disabled);
-  background: #17140f;
+  background: #f4f3f1;
   cursor: not-allowed;
 }
 
@@ -206,7 +223,7 @@ select option { background: var(--surface); color: var(--ink); }
 }
 
 .btn--primary { background: var(--accent); color: var(--on-accent); }
-.btn--primary:disabled { background: #4a4034; color: var(--ink-disabled); cursor: not-allowed; }
+.btn--primary:disabled { background: #e8e7e4; color: var(--ink-disabled); cursor: not-allowed; }
 
 .btn--ghost {
   background: transparent;
@@ -227,8 +244,8 @@ select option { background: var(--surface); color: var(--ink); }
   gap: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--tag);
+  background: var(--tag-soft);
   padding: 6px 13px;
   border-radius: var(--radius-sm);
 }
@@ -305,7 +322,7 @@ select option { background: var(--surface); color: var(--ink); }
   border-radius: var(--radius);
   padding: 13px 18px;
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
   animation: toast-in 0.18s ease-out;
 }
 
@@ -321,7 +338,7 @@ select option { background: var(--surface); color: var(--ink); }
 .modal-layer {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(28, 25, 23, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -394,13 +411,13 @@ select option { background: var(--surface); color: var(--ink); }
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.linklike:hover { color: #e0b478; }
+.linklike:hover { color: #4a3b18; }
 
 .status-chip {
   font-size: 12px;
   font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--tag);
+  background: var(--tag-soft);
   padding: 5px 10px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -518,8 +535,8 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 最後一個單位（分）的右邊距會讓整排比上面那排短 2px，切齊時看得出來 */
 .dt-row .dt-unit:last-child { margin-right: 0; }
 
-/* 頂欄的品牌圖。原本是一個 20px 的勾勾 SVG，改成圖檔之後尺寸給大一點：
-   那是四個字排成 2×2，20px 會糊成一團。 */
+/* 頂欄的品牌圖。26px 而不是 20px：來源圖有細節（冰淇淋＋雲），
+   再小會糊成一團。 */
 .topbar__mark {
   width: 26px;
   height: 26px;
@@ -563,7 +580,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
 }
 
 .search-hit {
@@ -625,7 +642,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
   overflow: hidden;
 }
 
@@ -675,7 +692,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 破壞性動作的按鈕。紅底白字——它跟旁邊那顆「編輯」的後果不是同一個
    量級，長得一樣會被順手按到。 */
 .btn--danger { background: var(--danger); color: #fff; }
-.btn--danger:disabled { background: #4a3330; color: var(--ink-disabled); cursor: not-allowed; }
+.btn--danger:disabled { background: #f4f3f1; color: var(--ink-disabled); cursor: not-allowed; }
 
 /* 時間輸入有兩組（自由輸入／店家設定的時段），同時只出現一組。
    兩組共用同一個寬度，切換時整排不會跳動。 */
@@ -717,7 +734,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+  box-shadow: 0 12px 32px rgba(28, 25, 23, .12);
 }
 
 .cal__head {
@@ -856,4 +873,6 @@ iframe[src*="accounts.google.com"] {
   color: var(--danger);
   white-space: nowrap;
 }
-.status-chip--warn { color: var(--danger); background: var(--danger-soft); }
+/* 「異常停權」比「停用」高一級：前者是系統自動判定的，後者是管理員手動
+   關掉的。兩個都用灰底紅字的話長得一模一樣，看不出哪個是系統停的。 */
+.status-chip--warn { color: #fff; background: var(--danger); }
