@@ -964,6 +964,7 @@ export function createAdminView({ tab, sub } = {}) {
           el('div', { class: 'list-item__meta' }, [
             `${item.session_date} ${item.session_time} · ${item.player_name}`,
           ]),
+          noteLine(item.note),
         ]),
         el('div', { class: 'list-item__side' },
           // 補上 status 再進編輯畫面。清單那一包刻意沒有這個欄位（子頁籤
@@ -1328,5 +1329,14 @@ function fmtTime(iso) {
 
 function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
+}
+
+/**
+ * 場次清單每一項的最後一行：備註。沒寫（或只有空白）就整行不出現，
+ * 不要留一行「備註：」佔位置。
+ */
+function noteLine(note) {
+  const text = (note ?? '').trim();
+  return text ? el('div', { class: 'list-item__note' }, `備註：${text}`) : null;
 }
 

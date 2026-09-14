@@ -395,6 +395,14 @@ select option { background: var(--surface); color: var(--ink); }
 .list-item__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .list-item__title { font-size: 15px; font-weight: 700; }
 .list-item__meta { font-size: 13px; color: var(--ink-soft); }
+/* 備註是 textarea 打的：換行照原樣留著（pre-wrap）；一長串沒有空白的字
+   （例如網址）也要能折行，不然會把卡片撐出畫面。 */
+.list-item__note {
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .list-item__links {
   display: flex;
