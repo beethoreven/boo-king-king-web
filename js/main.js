@@ -52,7 +52,7 @@ const VIEWS = {
       start();
     }),
   },
-  mybookings: { label: '我預定的場次', minRole: 3, menuOnly: true,
+  mybookings: { label: '我預訂的場次', minRole: 3, menuOnly: true,
     build: (route) => createMyBookingsView(route) },
 };
 
@@ -164,7 +164,7 @@ function userMenu() {
 
   if (user) {
     items.push(menuButton('使用者資料', () => switchView('profile')));
-    items.push(menuButton('我預定的場次', () => switchView('mybookings')));
+    items.push(menuButton('我預訂的場次', () => switchView('mybookings')));
   }
   // 兩份文件排在登出上面：登出是這個選單的終點，在它後面再放東西會讓人
   // 多找一次。不分登入狀態一律顯示。

@@ -17,7 +17,7 @@
  *
  * ## 三層
  *
- *   view —— 畫面（預約／主持人介面／管理員介面／使用者資料／我預定的場次）
+ *   view —— 畫面（預約／主持人介面／管理員介面／使用者資料／我預訂的場次）
  *   tab  —— 畫面裡的頁籤
  *   sub  —— 頁籤裡的子頁籤（目前只有管理員的場次管理有）
  *
@@ -86,7 +86,7 @@ export function replaceRoute(route) {
  * ★ 頁籤的寫入**一定要先問過這件事**，否則會踩到「過期的非同步回應覆蓋
  *   較新狀態」那一類的錯（known-issue 第 2 條）。實際會發生的事：
  *
- *     1. 使用者在「我預定的場次」，loadTabs() 還在飛
+ *     1. 使用者在「我預訂的場次」，loadTabs() 還在飛
  *     2. 他按了「回到預約」，接著點進管理員介面（網址 ?view=admin&tab=mmg）
  *     3. 那個**已經被丟掉的**畫面的 loadTabs() 這時才回來，
  *        呼叫 setRouteTab('gm-confirm')
@@ -114,7 +114,7 @@ function stillOn(viewSlug) {
 //   舊那個物件沒有人再看它，但它送出去的請求還在飛，回來時照樣會執行。所以：
 //
 //     1. 從信裡點進 ?view=mybookings&tab=booked → 實例 ①，loadTabs() 送出
-//     2. 很快按「回到預約」，再從選單點回「我預定的場次」→ 實例 ②
+//     2. 很快按「回到預約」，再從選單點回「我預訂的場次」→ 實例 ②
 //        （這次網址沒有 tab，會落在第一個頁籤）
 //     3. 實例 ① 的回應這時才回來，呼叫 setRouteTab('mybookings', 'booked')
 //     4. stillOn('mybookings') 是**真**的——實例 ② 也在 mybookings → 放行
@@ -168,7 +168,7 @@ export function onRouteChange(fn) {
 //   模組載不起來；頁籤清單由後端給的（沒辦法在載入時檢查）則在拿到清單當下
 //   檢查，不符就在畫面上顯示一段紅字。
 //
-// 這五個 status 兩個畫面共用（管理員的場次管理、玩家的我預定的場次），
+// 這五個 status 兩個畫面共用（管理員的場次管理、玩家的我預訂的場次），
 // 後端也是共用的一份（db/bookings.py 的 TAB_LABEL）。
 export const STATUS_SLUG = {
   gm_confirm: 'gm-confirm',

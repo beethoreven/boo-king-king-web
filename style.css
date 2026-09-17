@@ -369,7 +369,7 @@ select option { background: var(--surface); color: var(--ink); }
 }
 
 .modal__title { font-size: 16px; font-weight: 700; }
-/* 對話框內文常常是多行（缺漏項目清單、預定者資料、主持人名單），
+/* 對話框內文常常是多行（缺漏項目清單、預訂者資料、主持人名單），
    內容是用 \n 串起來的純文字，沒有這行就會全部摺成一行。 */
 .modal__body {
   font-size: 14px;

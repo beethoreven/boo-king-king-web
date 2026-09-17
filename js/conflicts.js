@@ -49,7 +49,7 @@ async function fetchConflicts(bookingId) {
 function blockDialog(title, conflicts, tail) {
   return confirmDialog({
     title,
-    body: `${conflicts.map((c) => `${c.mmg_name} 已預定在 ${when(c)}`).join('\n')}\n\n${tail}`,
+    body: `${conflicts.map((c) => `${c.mmg_name} 已預訂在 ${when(c)}`).join('\n')}\n\n${tail}`,
     confirmText: '取消',
     cancelText: null,
   });
@@ -62,7 +62,7 @@ function roomConflictDialog(room, { tail, confirmText }) {
   const lines = room.map((c) => `${c.mmg_name} ${when(c)}`);
   return confirmDialog({
     title: '該場次時間衝突',
-    body: `已預定場次時間為\n${lines.join('\n')}\n\n${tail}`,
+    body: `已預訂場次時間為\n${lines.join('\n')}\n\n${tail}`,
     confirmText,
     cancelText: '取消',
   });

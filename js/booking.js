@@ -583,8 +583,8 @@ export function createBookingView() {
     // 後端也會擋（那是把關），這裡擋是為了讓他早點知道。
     if (!getUser()?.has_contact) {
       await alertDialog({
-        title: '無法預定場次',
-        body: '你沒有填寫基本聯絡資料，無法預定場次',
+        title: '無法預訂場次',
+        body: '你沒有填寫基本聯絡資料，無法預訂場次',
       });
       return;
     }
