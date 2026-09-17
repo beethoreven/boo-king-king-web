@@ -107,7 +107,7 @@ export function createProfileView(onDeleted) {
     if (!isComplete(draft)) {
       const ok = await confirmDialog({
         title: '確認移除聯絡資料',
-        body: '若無提供聯絡資料，將會無法正常預定，確定要移除聯絡資料嗎？',
+        body: '若無提供聯絡資料，將會無法正常預訂，確定要移除聯絡資料嗎？',
         confirmText: '是',
         cancelText: '否',
       });
@@ -170,7 +170,7 @@ export function createProfileView(onDeleted) {
     deleteBtn.disabled = state.editing || state.saving;
 
     hint.textContent = isComplete(d)
-      ? '' : '目前沒有完整的聯絡資料，將無法預定場次';
+      ? '' : '目前沒有完整的聯絡資料，將無法預訂場次';
 
     root.append(
       el('div', { class: 'section' }, [

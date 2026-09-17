@@ -28,7 +28,7 @@ const SECTION_SLUG = { mmg: 'mmg', bookings: 'bookings', users: 'users', abuse: 
 assertSlugs('管理員介面', SECTION_SLUG, SECTIONS.map((s) => s.key));
 const sectionRoute = slugs(SECTION_SLUG);
 
-// 場次管理底下的子頁籤 = 五個 status，網址名稱與玩家的「我預定的場次」
+// 場次管理底下的子頁籤 = 五個 status，網址名稱與玩家的「我預訂的場次」
 // 共用同一份——同一個狀態在兩個畫面上不該有兩個網址名字。
 const subRoute = slugs(STATUS_SLUG);
 
@@ -1091,11 +1091,11 @@ export function createAdminView({ tab, sub } = {}) {
         }, b.filterOpen ? '收起篩選器' : '篩選器'),
         el('button', {
           class: 'btn btn--ghost btn--small',
-          // 新增場次要選預定者，而使用者清單是切到「使用者管理」才載的。
+          // 新增場次要選預訂者，而使用者清單是切到「使用者管理」才載的。
           // 這裡順手載一次，不然那個下拉會是空的。
           onClick: () => {
             openEditor(b, emptyBooking());
-            // 新增場次要選預定者，而使用者清單是切到「使用者管理」才載的。
+            // 新增場次要選預訂者，而使用者清單是切到「使用者管理」才載的。
             if (!state.users.items.length) loadUsers();
           },
         }, '＋ 新增場次'),
@@ -1108,7 +1108,7 @@ export function createAdminView({ tab, sub } = {}) {
       const set = (k) => (e) => { b.draft[k] = e.target.value; };
       nodes.push(el('div', { class: 'section' }, el('div', { class: 'list' }, [
         field({ label: '劇本名稱', control: el('input', { type: 'text', value: b.draft.mmg_name, onInput: set('mmg_name') }) }),
-        field({ label: '預定者名稱', control: el('input', { type: 'text', value: b.draft.player_name, onInput: set('player_name') }) }),
+        field({ label: '預訂者名稱', control: el('input', { type: 'text', value: b.draft.player_name, onInput: set('player_name') }) }),
         el('div', { class: 'row' }, [
           field({ label: '日期', control: el('input', { type: 'date', value: b.draft.session_date, onChange: set('session_date') }) }),
           field({ label: '時間', control: el('input', { type: 'time', step: '1800', value: b.draft.session_time, onChange: set('session_time') }) }),
@@ -1236,7 +1236,7 @@ export function createAdminView({ tab, sub } = {}) {
 
     return el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, isNew ? '新增場次' : `編輯場次 #${item.id}`),
-      // 既有場次的劇本與預定者只顯示不編輯（改這兩者等於變成另一筆預約）；
+      // 既有場次的劇本與預訂者只顯示不編輯（改這兩者等於變成另一筆預約）；
       // 新增時當然要選。
       isNew
         ? el('div', { class: 'row' }, [
@@ -1257,13 +1257,13 @@ export function createAdminView({ tab, sub } = {}) {
               }),
             }),
             field({
-              label: '預定者',
+              label: '預訂者',
               control: select({
                 options: [{ value: '', label: '請選擇' },
                   ...state.users.items.map((u) => ({ value: u.id, label: u.name || u.email }))],
                 value: item.player_id ?? '',
                 onChange: (v) => { item.player_id = v ? Number(v) : null; },
-                ariaLabel: '預定者',
+                ariaLabel: '預訂者',
               }),
             }),
           ])

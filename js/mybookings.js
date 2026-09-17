@@ -1,5 +1,5 @@
 /**
- * 「我預定的場次」：玩家看自己的預約。
+ * 「我預訂的場次」：玩家看自己的預約。
  *
  * 只能看，不能改。取消或改時間都要經過店家，這一頁是查詢用的——放上
  * 編輯功能會讓人以為自己改得動，然後在真的需要改的時候才發現不行。
@@ -67,7 +67,7 @@ export function createMyBookingsView({ tab } = {}) {
       // 頁籤清單是後端給的，所以完整性只能在這裡檢查——不像靜態的表可以
       // 在載入時就擋下來。
       // subset 的理由同 admin.js。
-      state.gap = slugGap('我預定的場次', STATUS_SLUG, state.tabOrder, { subset: true });
+      state.gap = slugGap('我預訂的場次', STATUS_SLUG, state.tabOrder, { subset: true });
       // 網址指定的優先，指不到（舊連結、拼錯）就退回第一個頁籤。
       const wanted = tabRoute.toKey(tab);
       state.tab = state.tabOrder.includes(wanted) ? wanted : state.tabOrder[0];

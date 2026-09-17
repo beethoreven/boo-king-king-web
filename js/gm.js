@@ -169,7 +169,7 @@ export function createGmView({ tab } = {}) {
       const d = await api.get(`/api/bookings/${bookingId}/detail`);
       const p = d.player;
       await alertDialog({
-        title: '預定者資料',
+        title: '預訂者資料',
         body: [
           `稱呼：${p.name || '（未填）'}`,
           `Email：${p.email}`,
@@ -226,7 +226,7 @@ export function createGmView({ tab } = {}) {
           control: el('input', { type: 'text', value: state.draft.mmg_name, onInput: set('mmg_name'), placeholder: '不填＝不篩選' }),
         }),
         field({
-          label: '預定者名稱',
+          label: '預訂者名稱',
           control: el('input', { type: 'text', value: state.draft.player_name, onInput: set('player_name'), placeholder: '不填＝不篩選' }),
         }),
         field({
@@ -267,7 +267,7 @@ export function createGmView({ tab } = {}) {
         el('div', { class: 'list-item__title' }, [
           scriptName(item.mmg_name, item.mmg_url),
           // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
-          // 時最需要一眼看到的——「這場我是誰」比「預定者是誰」先要緊。
+          // 時最需要一眼看到的——「這場我是誰」比「預訂者是誰」先要緊。
           item.role_name && el('span', { class: 'sep' }, '·'),
           item.role_name && asyncLink(item.role_name, () => showGms(item.id)),
         ].filter(Boolean)),
