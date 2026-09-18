@@ -49,9 +49,13 @@ const MAX_DOTS = 3;
  *        設定前問一次。回 false 就不設——那天已經有場次時要先警告（案主定案：
  *        警告過還是要設就讓他設）。statuses 是那天的點，畫面手上本來就有，
  *        所以不必為了問「那天有沒有場次」多打一支 API。
+ * @param {() => Promise<boolean>} [opts.canLeave]
+ *        換日期、換月份之前問一次。清單上有打開、還沒存的編輯畫面時，要先問
+ *        「尚未儲存，是否確認退出」——否則換一天就把他改到一半的東西丟了，
+ *        而且沒有任何訊息。
  */
 export function createCalendarPage({
-  loadMonth, loadDay, loadLegend, renderItem, emptyText, moreText, busy,
+  loadMonth, loadDay, loadLegend, renderItem, emptyText, moreText, busy, canLeave,
 }) {
   const root = el('div', { class: 'view' });
   const today = new Date();
@@ -232,7 +236,8 @@ export function createCalendarPage({
   // ── 動作 ────────────────────────────────────────────────────
 
   /** 選某一天：日曆上標起來、下面列出那天的場次、三格跟著同步。 */
-  function pickDay(iso) {
+  async function pickDay(iso) {
+    if (canLeave && !await canLeave()) return;
     state.selected = iso;
     syncFields();
     syncBusyBtn();
@@ -240,7 +245,8 @@ export function createCalendarPage({
     fetchDay(iso);
   }
 
-  function shiftMonth(delta) {
+  async function shiftMonth(delta) {
+    if (canLeave && !await canLeave()) return;
     let m = state.month + delta;
     let y = state.year;
     if (m < 1) { m = 12; y -= 1; }
@@ -276,7 +282,7 @@ export function createCalendarPage({
    * 這三格只是換位置，不送出任何東西，所以打錯沒有後果——不必像預約畫面
    * 那樣把錯誤講出來，安靜地停在原地就好。
    */
-  function applyFields() {
+  async function applyFields() {
     const y = Number(fieldYear.value.trim());
     const m = Number(fieldMonth.value.trim());
     const d = Number(fieldDay.value.trim());
@@ -287,6 +293,7 @@ export function createCalendarPage({
     const probe = new Date(y, m - 1, d);
     if (probe.getFullYear() !== y || probe.getMonth() !== m - 1 || probe.getDate() !== d) return;
     if (isoOf(y, m, d) === state.selected) return;   // 已經在這一天了
+    if (canLeave && !await canLeave()) { syncFields(); return; }
     jumpTo(y, m, d);
   }
 
