@@ -24,6 +24,13 @@
   --danger: #d9705a;
   --danger-soft: #2e1c17;
 
+  /* 預訂行事曆上那排點的顏色。一個狀態一個顏色，圖例就印在日曆上方，
+     所以這四個值改了要記得那一列講的也跟著變。 */
+  --dot-wait: #e0b341;     /* 等待主持人確認 */
+  --dot-deposit: #d9705a;  /* 等待支付訂金 */
+  --dot-booked: #6aa3d8;   /* 預約成立 */
+  --dot-ended: #6f675d;    /* 已結束 */
+
   --radius: 10px;
   --radius-sm: 6px;
   --pad: 18px;
@@ -875,3 +882,57 @@ iframe[src*="accounts.google.com"] {
   white-space: nowrap;
 }
 .status-chip--warn { color: var(--danger); background: var(--danger-soft); }
+
+/* ── 預訂行事曆 ─────────────────────────────────────────────── */
+
+/* 格子裡是「日期 + 底下一排點」，所以改成上下排。
+   沒有點的日子不會多出空白：marks 不存在時這一格就只有數字。 */
+.cal__day--mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  line-height: 1.1;
+}
+.cal__day-num { font-size: 15px; }
+
+/* 一場一個點，依開始時間由左往右。
+   ★ 四場以上改畫一條線（見 js/mycalendar.js 的 MAX_DOTS）：一格在 320px
+     的手機上只有約 39px 寬，第 5 個點就擠出去了。線用文字色而不是某個
+     狀態色——它說的是「這天很滿」，不是某一種狀態。 */
+.cal-marks { display: flex; align-items: center; gap: 3px; height: 6px; }
+.cal-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.cal-line { display: inline-block; width: 22px; height: 3px; border-radius: 2px; background: var(--ink); }
+/* 選起來的那一格底色是 accent，線要換成對比色才看得見。 */
+.cal__day.is-selected .cal-line { background: var(--on-accent); }
+/* 同理，點畫在 accent 底色上時，黃點會跟底色糊在一起——描一圈深色邊，
+   四種顏色在選起來的那一格上就都還分得出來。 */
+.cal__day.is-selected .cal-dot { box-shadow: 0 0 0 1px var(--on-accent); }
+
+.cal-dot--gm_confirm { background: var(--dot-wait); }
+.cal-dot--gm_reviewed { background: var(--dot-deposit); }
+.cal-dot--booked { background: var(--dot-booked); }
+.cal-dot--ended { background: var(--dot-ended); }
+
+/* 圖例。點只有配上這一列才看得懂，所以它跟日曆是一組的，不是裝飾。 */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.cal-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 日曆下面「直接輸入年月日」那一排。外觀沿用預約畫面的 .dt-row，但不讓它
+   長滿整列：三格撐滿之後，數字之間離得比日曆格子還開，而且那一排右邊之後
+   要放主持人與店家版本的「設定忙碌日」。 */
+.dt-row--jump { padding-top: 10px; }
+.dt-row--jump input.dt-input { flex: 0 0 auto; width: 76px; }
+.dt-row--jump input.dt-input--year { width: 92px; }
+
+/* 行事曆的清單裡每一項最後一行是狀態：同一天混著各種狀態，
+   沒有這一行就分不出哪一筆是哪一種。比其他 meta 亮一階。 */
+.list-item__status { color: var(--ink); }

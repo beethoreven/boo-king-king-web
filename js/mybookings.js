@@ -158,41 +158,6 @@ export function createMyBookingsView({ tab } = {}) {
     ]));
   }
 
-  function renderItem(item) {
-    const paid = item.deposit ?? 0;
-    const due = item.booking_cost ?? 0;
-    return el('div', { class: 'card list-item' }, [
-      el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
-        el('div', { class: 'list-item__meta' },
-          `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`),
-        el('div', { class: 'list-item__meta' },
-          item.gm_names.length
-            // 點開才看得到「誰、確認了沒」。列在這裡只有名字，而玩家真正
-            // 想知道的是自己這場成立了沒——那要看確認狀態。
-            ? asyncLink('主持', () => showGms(item.id))
-            : '尚未指定主持人'),
-        // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
-        // 是在講一件已經不會發生的事。
-        !['ended', 'cancelled'].includes(item.status)
-          && el('div', { class: 'list-item__meta' }, `訂金 ${paid} / ${due}`),
-      ]),
-      el('div', { class: 'list-item__side' }, [
-        // 序位只在還沒定案時有意義。已成立就是他的場，講「第 1 序位」
-        // 反而讓人以為還在排隊。
-        //
-        // 容量 1 的時段也不顯示：那種時段沒有排隊這回事，「第 1 序位」會讓人
-        // 以為後面還有第 2、第 3。這是從劇本自己的 waitlist_limit 推出來的，
-        // 不是另一個設定——哪天那齣戲放寬到 3，標籤自己就回來了。
-        item.position != null
-          && ['gm_confirm', 'gm_reviewed'].includes(item.status)
-          && item.waitlist_limit !== 1
-          ? el('div', { class: 'status-chip' }, `第 ${item.position} 序位`)
-          : null,
-      ]),
-    ]);
-  }
-
   function renderPager() {
     const t = state.data[state.tab];
     const atFirst = t.start <= 1;
@@ -248,13 +213,61 @@ export function createMyBookingsView({ tab } = {}) {
       return;
     }
 
-    root.append(el('div', { class: 'section' }, el('div', { class: 'list' }, t.items.map(renderItem))));
+    root.append(el('div', { class: 'section' },
+      el('div', { class: 'list' }, t.items.map((item) => bookingCard(item)))));
     const pager = renderPager();
     if (pager) root.append(el('div', { class: 'section' }, pager));
   }
 
   loadTabs();
   return root;
+}
+
+/**
+ * 一筆預約的卡片。**「我預訂的場次」與「預訂行事曆」共用這一張。**
+ *
+ * 各畫一份的話，只要有人改了其中一邊，同一場戲在兩個畫面上就會長得不一樣，
+ * 而那種不一致不會有任何錯誤訊息——跟 TAB_LABEL 一份共用是同一個理由。
+ *
+ * showStatus：行事曆的某一天是各種狀態混在一起，所以每一項最下面補一行
+ * 狀態；頁籤那邊狀態就是頁籤本身，再寫一次是多的。
+ */
+export function bookingCard(item, { showStatus = false } = {}) {
+  const paid = item.deposit ?? 0;
+  const due = item.booking_cost ?? 0;
+  return el('div', { class: 'card list-item' }, [
+    el('div', { class: 'list-item__main' }, [
+      el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
+      el('div', { class: 'list-item__meta' },
+        `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`),
+      el('div', { class: 'list-item__meta' },
+        item.gm_names.length
+          // 點開才看得到「誰、確認了沒」。列在這裡只有名字，而玩家真正
+          // 想知道的是自己這場成立了沒——那要看確認狀態。
+          ? asyncLink('主持', () => showGms(item.id))
+          : '尚未指定主持人'),
+      // 訂金只在還有意義的時候顯示。已結束或已取消的場次再提「還差多少」
+      // 是在講一件已經不會發生的事。
+      !['ended', 'cancelled'].includes(item.status)
+        && el('div', { class: 'list-item__meta' }, `訂金 ${paid} / ${due}`),
+      // 狀態用後端給的字，跟頁籤名稱是同一份——兩個畫面不會各自翻譯一次。
+      showStatus && el('div', { class: 'list-item__meta list-item__status' },
+        item.status_label ?? item.status),
+    ]),
+    el('div', { class: 'list-item__side' }, [
+      // 序位只在還沒定案時有意義。已成立就是他的場，講「第 1 序位」
+      // 反而讓人以為還在排隊。
+      //
+      // 容量 1 的時段也不顯示：那種時段沒有排隊這回事，「第 1 序位」會讓人
+      // 以為後面還有第 2、第 3。這是從劇本自己的 waitlist_limit 推出來的，
+      // 不是另一個設定——哪天那齣戲放寬到 3，標籤自己就回來了。
+      item.position != null
+        && ['gm_confirm', 'gm_reviewed'].includes(item.status)
+        && item.waitlist_limit !== 1
+        ? el('div', { class: 'status-chip' }, `第 ${item.position} 序位`)
+        : null,
+    ]),
+  ]);
 }
 
 /** 2026-08-30 → 日。純顯示用，日期字串本身就是台北時間的字面值。 */

@@ -29,6 +29,32 @@ const pad = (n) => String(n).padStart(2, '0');
 const isoOf = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 
 /**
+ * 星期標題列。跟下面的 monthCells 分開，是因為載入中也要看得到這一列——
+ * 少了它，抓資料的那一兩秒整個格子會塌成一團再彈回來。
+ */
+export function weekdayRow() {
+  return WEEKDAY.map((w) => el('div', { class: 'cal__dow', role: 'columnheader' }, w));
+}
+
+/**
+ * 一個月的格子：前面補到 1 號的星期，然後每一天一格。
+ *
+ * 這一支只管「哪一格是哪一天」，格子長什麼樣由呼叫端的 cellFor 決定——
+ * 預約畫面的選擇器要把沒開放的日子變成不能點，預訂行事曆要在日期底下畫點，
+ * 兩者需要的格子完全不同，但「這個月有幾天、1 號是星期幾」只該算一次。
+ *
+ * ★ 用 Date 只為了算星期與天數，不涉及時區：年月日都是本地的字面值。
+ */
+export function monthCells(year, month, cellFor) {
+  const out = [];
+  const lead = new Date(year, month - 1, 1).getDay();
+  for (let i = 0; i < lead; i += 1) out.push(el('div', { class: 'cal__pad' }));
+  const total = new Date(year, month, 0).getDate();
+  for (let d = 1; d <= total; d += 1) out.push(cellFor(isoOf(year, month, d), d));
+  return out;
+}
+
+/**
  * @param {object} opts
  * @param {(iso: string) => void} opts.onPick  選了某一天
  * @param {(year:number, month:number) => Promise<object>} opts.loadMonth
@@ -107,27 +133,16 @@ export function createCalendar({ onPick, loadMonth }) {
     title.textContent = `${year} 年 ${month} 月`;
     clear(grid);
 
-    for (const w of WEEKDAY) {
-      grid.append(el('div', { class: 'cal__dow', role: 'columnheader' }, w));
-    }
+    grid.append(...weekdayRow());
     if (loading) {
       grid.append(el('div', { class: 'cal__empty' }, '載入中…'));
       return;
     }
 
-    // 這個月 1 號是星期幾，前面補幾個空格。用 Date 只為了算星期，
-    // 不涉及時區——年月日都是本地的字面值。
-    const lead = new Date(year, month - 1, 1).getDay();
-    for (let i = 0; i < lead; i += 1) {
-      grid.append(el('div', { class: 'cal__pad' }));
-    }
-
-    const total = new Date(year, month, 0).getDate();
-    for (let d = 1; d <= total; d += 1) {
-      const iso = isoOf(year, month, d);
+    grid.append(...monthCells(year, month, (iso, d) => {
       const times = days[iso];
       const openDay = Array.isArray(times) && times.length > 0;
-      grid.append(el('button', {
+      return el('button', {
         type: 'button',
         // ★ 沒開放的就是 disabled，不是「點了再說不行」。這整支存在的
         //   理由就是這一行。
@@ -138,8 +153,8 @@ export function createCalendar({ onPick, loadMonth }) {
           ? `${month} 月 ${d} 日，開放 ${times.join('、')}`
           : `${month} 月 ${d} 日，未開放`,
         onClick: () => { selected = iso; render(); close(); onPick(iso); },
-      }, String(d)));
-    }
+      }, String(d));
+    }));
 
     if (!Object.keys(days).length) {
       grid.append(el('div', { class: 'cal__empty' },

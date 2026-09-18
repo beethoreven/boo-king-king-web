@@ -22,6 +22,7 @@ import { createAdminView } from './admin.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
 import { createMyBookingsView } from './mybookings.js';
+import { createMyCalendarView } from './mycalendar.js';
 import { readRoute, pushRoute, replaceRoute, onRouteChange, slugs, assertSlugs } from './route.js';
 
 const app = document.getElementById('app');
@@ -56,6 +57,10 @@ const VIEWS = {
   },
   mybookings: { label: '我預訂的場次', minRole: 3, menuOnly: true,
     build: (route) => createMyBookingsView(route) },
+  // 同一批資料的另一種看法：「我預訂的場次」按狀態分頁籤，這一頁按日期。
+  // 兩頁共用同一張卡片（mybookings.js 的 bookingCard）。
+  mycalendar: { label: '預訂行事曆', minRole: 3, menuOnly: true,
+    build: () => createMyCalendarView() },
 };
 
 /**
@@ -72,6 +77,7 @@ const VIEW_SLUG = {
   admin: 'admin',
   profile: 'account',
   mybookings: 'mybookings',
+  mycalendar: 'mycalendar',
 };
 assertSlugs('畫面', VIEW_SLUG, Object.keys(VIEWS));
 const viewRoute = slugs(VIEW_SLUG);
@@ -168,6 +174,7 @@ function userMenu() {
   if (user) {
     items.push(menuButton('使用者資料', () => switchView('profile')));
     items.push(menuButton('我預訂的場次', () => switchView('mybookings')));
+    items.push(menuButton('預訂行事曆', () => switchView('mycalendar')));
   }
   // 兩份文件排在登出上面：登出是這個選單的終點，在它後面再放東西會讓人
   // 多找一次。不分登入狀態一律顯示。
