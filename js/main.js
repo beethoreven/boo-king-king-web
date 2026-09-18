@@ -18,6 +18,7 @@ import { refreshStatus, logout, getUser, hasRole, renderGoogleButton,
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
 import { createGmView } from './gm.js';
+import { createGmCalendarView } from './gmcalendar.js';
 import { createAdminView } from './admin.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
@@ -41,6 +42,10 @@ if (!SITE_NAME) throw new Error('index.html 沒有填 __BOO_KING_KING_SITE_NAME_
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
   gm: { label: '主持人介面', minRole: 2, build: (route) => createGmView(route) },
+  // 主持人介面的另一種看法：那一頁按狀態分頁籤，這一頁按日期。兩者互切的
+  // 按鈕在頂欄（見 PAIRED），所以它不進頂欄的切換列、也不進選單。
+  gmcalendar: { label: '指定行事曆', minRole: 2, menuOnly: true,
+    build: () => createGmCalendarView() },
   admin: { label: '管理員介面', minRole: 1, build: (route) => createAdminView(route) },
   // 選單裡的頁面。不放進頂欄的切換按鈕，所以 minRole 只是形式上的下限。
   profile: {
@@ -74,6 +79,7 @@ const VIEWS = {
 const VIEW_SLUG = {
   booking: 'booking',   // 是預設值，實際上不會寫進網址（見 route.js）
   gm: 'gm',
+  gmcalendar: 'gmcalendar',
   admin: 'admin',
   profile: 'account',
   mybookings: 'mybookings',
@@ -223,11 +229,32 @@ function menuIcon() {
   return svg;
 }
 
+/**
+ * 成對的兩個畫面：在其中一個時，頂欄多一顆切到另一個的按鈕。
+ *
+ * ★ 這是上面「從子介面只能回到預約畫面，不能互跳」那條規則的例外，而且是
+ *   刻意的：場次確認與指定行事曆是同一件事的兩種看法（同一批場次，一個按
+ *   狀態分、一個按日期分），不是兩個工作區域。互跳不會讓人搞不清自己在哪。
+ *
+ * 按鈕放在「回到預約」的左邊（案主指定）。
+ */
+const PAIRED = {
+  gm: { to: 'gmcalendar', label: '指定行事曆' },
+  gmcalendar: { to: 'gm', label: '場次確認' },
+};
+
 function renderTopbar() {
   const user = getUser();
   const actions = [];
 
   if (user) {
+    const pair = PAIRED[currentView];
+    if (pair && hasRole(VIEWS[pair.to].minRole)) {
+      actions.push(el('button', {
+        class: 'btn btn--ghost btn--small',
+        onClick: () => switchView(pair.to),
+      }, pair.label));
+    }
     // 切換入口：只顯示「不是目前這個」而且權限夠的。
     // role 3 兩個都看不到，所以完全沒有切換點。
     for (const [key, view] of Object.entries(VIEWS)) {

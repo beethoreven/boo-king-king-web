@@ -915,6 +915,12 @@ iframe[src*="accounts.google.com"] {
 .cal-dot--booked { background: var(--dot-booked); }
 .cal-dot--ended { background: var(--dot-ended); }
 
+/* 指定行事曆用的是主持人視角的分類，不是整筆的狀態：待確認＝還在等他自己
+   按確認、已確認＝他按過了（不管整筆走到哪一步）。顏色沿用同一組 token，
+   所以兩份行事曆上「黃＝還要動作、藍＝定了、灰＝過去了」是同一件事。 */
+.cal-dot--pending { background: var(--dot-wait); }
+.cal-dot--confirmed { background: var(--dot-booked); }
+
 /* 圖例。點只有配上這一列才看得懂，所以它跟日曆是一組的，不是裝飾。 */
 .cal-legend {
   display: flex;

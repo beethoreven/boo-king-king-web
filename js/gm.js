@@ -12,7 +12,7 @@ import { gmMayConfirm } from './conflicts.js';
 import { setRouteTab, slugs, assertSlugs, newInstance } from './route.js';
 import { showGms } from './gms-dialog.js';
 
-const TABS = [
+export const TABS = [
   { key: 'pending', label: '待確認場次' },
   { key: 'confirmed', label: '已確認場次' },
   { key: 'ended', label: '已結束場次' },
@@ -164,40 +164,8 @@ export function createGmView({ tab } = {}) {
     render();
   }
 
-  async function showPlayer(bookingId) {
-    try {
-      const d = await api.get(`/api/bookings/${bookingId}/detail`);
-      const p = d.player;
-      await alertDialog({
-        title: '預訂者資料',
-        body: [
-          `稱呼：${p.name || '（未填）'}`,
-          `Email：${p.email}`,
-          `LINE：${p.line_id || '（未填）'}`,
-          `電話：${p.phone || '（未填）'}`,
-        ].join('\n'),
-      });
-    } catch (err) {
-      toast(err.message, { error: true });
-    }
-  }
-
   async function confirmBooking(item) {
-    const ok = await confirmDialog({
-      title: '確認主持指定',
-      body: '請確認已和玩家取得遊戲時間與主持共識。',
-      confirmText: '確認',
-    });
-    if (!ok) return;
-
-    // 撞期檢查排在同意之後、送出之前，讓「依然確認」按下去就是真的送出，
-    // 中間不再多問一次。自己撞期會直接擋下來（見 conflicts.js）。
-    if (!await gmMayConfirm(item.id)) return;
-
-    try {
-      await api.post(`/api/bookings/${item.id}/confirm`);
-      toast('已確認主持指定');
-
+    if (!await confirmGmBooking(item)) return;
       // 確認之後這筆會從待確認移到已確認。兩包都變了，但兩包都重抓是
       // 多花了兩支 API：
       //
@@ -205,13 +173,10 @@ export function createGmView({ tab } = {}) {
       //           跟後端再要一次一模一樣的清單。
       //   已確認——使用者現在人在待確認頁，那一包他還沒要看。先標記
       //           過期，等他切過去再抓（見 switchTab）。
-      const pending = state.tabs.pending;
-      pending.items = pending.items.filter((x) => x.id !== item.id);
-      state.tabs.confirmed.stale = true;
-      render();
-    } catch (err) {
-      toast(err.message, { error: true });
-    }
+    const pending = state.tabs.pending;
+    pending.items = pending.items.filter((x) => x.id !== item.id);
+    state.tabs.confirmed.stale = true;
+    render();
   }
 
   function renderFilterPanel() {
@@ -260,33 +225,10 @@ export function createGmView({ tab } = {}) {
     ]);
   }
 
-  function renderItem(item) {
-    const isPending = state.tab === 'pending';
-    return el('div', { class: 'card list-item' }, [
-      el('div', { class: 'list-item__main' }, [
-        el('div', { class: 'list-item__title' }, [
-          scriptName(item.mmg_name, item.mmg_url),
-          // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
-          // 時最需要一眼看到的——「這場我是誰」比「預訂者是誰」先要緊。
-          item.role_name && el('span', { class: 'sep' }, '·'),
-          item.role_name && asyncLink(item.role_name, () => showGms(item.id)),
-        ].filter(Boolean)),
-        el('div', { class: 'list-item__meta' }, [
-          `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
-        ]),
-        el('div', { class: 'list-item__links' }, [
-          asyncLink(item.player_name, () => showPlayer(item.id)),
-        ]),
-      ]),
-      el('div', { class: 'list-item__side' }, [
-        isPending
-          ? el('button', { class: 'btn btn--primary btn--small', onClick: () => confirmBooking(item) }, '確認')
-          : state.tab === 'confirmed'
-            ? el('div', { class: 'status-chip' }, item.status_label)
-            : null,
-      ]),
-    ]);
-  }
+  const renderItem = (item) => gmCard(item, {
+    category: state.tab,
+    onConfirm: () => confirmBooking(item),
+  });
 
   function renderPager() {
     const tab = state.tabs[state.tab];
@@ -357,6 +299,102 @@ export function createGmView({ tab } = {}) {
   render();
   loadAll();
   return root;
+}
+
+
+/** 分類 → 中文。頁籤表就是這一份，不另外寫第二份。
+ *  已取消不在頁籤裡（主持人介面沒有那一類），那一筆用後端給的 status_label。 */
+export const CATEGORY_LABEL = Object.fromEntries(TABS.map((t) => [t.key, t.label]));
+
+/**
+ * 預訂者的聯絡資料。主持人介面與指定行事曆共用。
+ *
+ * 只在點開時才打 API：清單上列出所有人的電話與 email，等於把一份聯絡名單
+ * 攤在畫面上，而主持人真正需要的是「我要聯絡這一位」。
+ */
+export async function showPlayer(bookingId) {
+  try {
+    const d = await api.get(`/api/bookings/${bookingId}/detail`);
+    const p = d.player;
+    await alertDialog({
+      title: '預訂者資料',
+      body: [
+        `稱呼：${p.name || '（未填）'}`,
+        `Email：${p.email}`,
+        `LINE：${p.line_id || '（未填）'}`,
+        `電話：${p.phone || '（未填）'}`,
+      ].join('\n'),
+    });
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+/**
+ * 確認主持指定。**主持人介面與指定行事曆共用這一段**，所以兩個入口的規矩
+ * 完全一樣：先問一次、再查撞期、才送出。同一個動作兩扇門、其中一扇守衛
+ * 比較少的話，遲早有人走那一扇。
+ *
+ * 回傳有沒有真的送出去，呼叫端據此決定自己的畫面怎麼更新。
+ */
+export async function confirmGmBooking(item) {
+  const ok = await confirmDialog({
+    title: '確認主持指定',
+    body: '請確認已和玩家取得遊戲時間與主持共識。',
+    confirmText: '確認',
+  });
+  if (!ok) return false;
+
+  // 撞期檢查排在同意之後、送出之前，讓「依然確認」按下去就是真的送出，
+  // 中間不再多問一次。自己撞期會直接擋下來（見 conflicts.js）。
+  if (!await gmMayConfirm(item.id)) return false;
+
+  try {
+    await api.post(`/api/bookings/${item.id}/confirm`);
+    toast('已確認主持指定');
+    return true;
+  } catch (err) {
+    toast(err.message, { error: true });
+    return false;
+  }
+}
+
+/**
+ * 主持人視角的一張卡片。主持人介面的清單與指定行事曆共用。
+ *
+ * category 是「這一場對我而言算哪一類」：主持人介面用當前頁籤，行事曆用
+ * 後端算好的欄位（兩者是同一套判斷，見後端的 _GM_CATEGORY_SQL）。
+ *
+ * showCategory：行事曆的某一天混著各種分類，所以每一項最下面補一行；
+ * 頁籤那邊分類就是頁籤本身，再寫一次是多的。
+ */
+export function gmCard(item, { category, onConfirm, showCategory = false } = {}) {
+  return el('div', { class: 'card list-item' }, [
+    el('div', { class: 'list-item__main' }, [
+      el('div', { class: 'list-item__title' }, [
+        scriptName(item.mmg_name, item.mmg_url),
+        // 自己在這一場擔任的角色。移到標題旁邊是因為那是主持人掃清單
+        // 時最需要一眼看到的——「這場我是誰」比「預訂者是誰」先要緊。
+        item.role_name && el('span', { class: 'sep' }, '·'),
+        item.role_name && asyncLink(item.role_name, () => showGms(item.id)),
+      ].filter(Boolean)),
+      el('div', { class: 'list-item__meta' }, [
+        `${item.session_date}（${weekday(item.session_date)}）${item.session_time}`,
+      ]),
+      el('div', { class: 'list-item__links' }, [
+        asyncLink(item.player_name, () => showPlayer(item.id)),
+      ]),
+      showCategory && el('div', { class: 'list-item__meta list-item__status' },
+        CATEGORY_LABEL[category] ?? item.status_label),
+    ]),
+    el('div', { class: 'list-item__side' }, [
+      category === 'pending'
+        ? el('button', { class: 'btn btn--primary btn--small', onClick: onConfirm }, '確認')
+        : category === 'confirmed'
+          ? el('div', { class: 'status-chip' }, item.status_label)
+          : null,
+    ]),
+  ]);
 }
 
 function hasActiveFilter(filters) {
