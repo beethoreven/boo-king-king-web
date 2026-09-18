@@ -51,9 +51,11 @@
   --dot-booked: #2f6fb5;   /* 預約成立 */
   --dot-ended: #9a958c;    /* 已結束 */
 
-  /* 忙碌日那一格的底色。比背景亮一階、但不搶走點的注意力——它是「這天不
-     開」的狀態，不是一種場次。 */
+  /* 忙碌日那一格：底色比背景亮一階，再加一圈外框。
+     ★ 只靠底色的話幾乎看不出來（案主 2026-09-18：「框框超不清楚」），所以
+       外框用白色、2px，一眼就看得到。 */
   --busy-bg: #2b2620;
+  --busy-ring: #ffffff;
 
   --radius: 10px;
   --radius-sm: 6px;
@@ -944,11 +946,17 @@ iframe[src*="accounts.google.com"] {
 /* 忙碌日：整格塗灰，再加一圈內框。
    ★ 內框不是裝飾：選中的那一格底色會換成 accent，只靠底色的話，
      「我現在選的這天是不是忙碌日」就看不出來了。 */
-.cal__day.is-busy { background: var(--busy-bg); box-shadow: inset 0 0 0 1px var(--border); }
+.cal__day.is-busy { background: var(--busy-bg); box-shadow: inset 0 0 0 2px var(--busy-ring); }
 /* ★ 選中又是忙碌日的那一格要自己寫一條。少了它，底色會吃 is-busy 的灰、
    文字色卻還是 is-selected 的深色——深色字配深色底，數字整個看不見
    （2026-09-18 實測抓到）。選中仍然以 accent 為主，忙碌靠上面那圈內框表達。 */
-.cal__day.is-busy.is-selected { background: var(--accent); color: var(--on-accent); }
+.cal__day.is-busy.is-selected {
+  background: var(--accent);
+  color: var(--on-accent);
+  /* 選中的那一格底色是 accent，白框在上面會糊掉，改用那一格的字色畫框——
+     「我選的這天是不是忙碌日」選中時也要看得出來。 */
+  box-shadow: inset 0 0 0 2px var(--on-accent);
+}
 
 .cal-dot--pending { background: var(--dot-wait); }
 .cal-dot--confirmed { background: var(--dot-booked); }
