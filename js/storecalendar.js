@@ -12,6 +12,7 @@
  */
 
 import { api } from './api.js';
+import { confirmDialog } from './ui.js';
 import { createCalendarPage } from './calendarpage.js';
 import { storeCard } from './admin.js';
 
@@ -32,5 +33,24 @@ export function createStoreCalendarView() {
     renderItem: (item) => storeCard(item, { showStatus: true }),
     emptyText: '這天沒有場次',
     moreText: '這天的場次太多，其餘請到場次管理查看',
+    // 店家忙碌日：那天整家店不開，玩家一律訂不到（比排期的每一層都高）。
+    busy: {
+      load: async (ym) => (await api.get(`/api/admin/busy/${ym}`)).dates,
+      set: (iso) => api.post('/api/admin/busy', { date: iso }),
+      clear: (iso) => api.del(`/api/admin/busy/${iso}`),
+      // 那天已經有場次還是可以設（案主定案），但要先講清楚後果——那些場次
+      // 不會自動消失，得有人去處置。這裡不另外打 API 問：日曆上那一格的點
+      // 就是那天的場次，畫面手上已經有了。
+      beforeSet: (iso, statuses) => statuses.length
+        ? confirmDialog({
+            title: '這天已經有場次',
+            body: `${iso} 已經有 ${statuses.length} 場非取消的場次。\n\n`
+                + '設成忙碌日不會取消它們，玩家之後也訂不了這一天。\n'
+                + '建議先確認那些場次要改期還是取消，並讓玩家知道處理方式。',
+            confirmText: '仍要設為忙碌日',
+            danger: true,
+          })
+        : Promise.resolve(true),
+    },
   }).node;
 }
