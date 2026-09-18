@@ -968,8 +968,14 @@ iframe[src*="accounts.google.com"] {
    長滿整列：三格撐滿之後，數字之間離得比日曆格子還開，而且那一排右邊之後
    要放主持人與店家版本的「設定忙碌日」。 */
 .dt-row--jump { padding-top: 10px; }
-.dt-row--jump input.dt-input { flex: 0 0 auto; width: 76px; }
-.dt-row--jump input.dt-input--year { width: 92px; }
+/* 三格平常是固定寬，窄螢幕時縮小，讓「設定忙碌日」留在同一排（案主：放在
+   那裡剛好一排滿）。下限是「數字還放得下」：四位數的年約 44px、兩位數約 26px。
+   ★ 不用換行解：一允許換行，瀏覽器會先換行再考慮縮格子，連 390px 的手機
+     按鈕都會掉到下一行（2026-09-18 實測）。 */
+.dt-row--jump input.dt-input { flex: 0 1 76px; width: auto; min-width: 36px; }
+.dt-row--jump input.dt-input--year { flex-basis: 92px; min-width: 48px; }
+/* 按鈕不折行、不被壓縮，靠右放——它是這一排的「動作」，不是第四格輸入。 */
+.dt-row--jump .btn { flex: 0 0 auto; white-space: nowrap; margin-left: auto; }
 
 /* 行事曆的清單裡每一項最後一行是狀態：同一天混著各種狀態，
    沒有這一行就分不出哪一筆是哪一種。比其他 meta 亮一階。 */
