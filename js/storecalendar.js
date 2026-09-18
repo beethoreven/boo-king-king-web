@@ -12,12 +12,82 @@
  */
 
 import { api } from './api.js';
-import { confirmDialog } from './ui.js';
+import { el, clear, toast, confirmDialog } from './ui.js';
 import { createCalendarPage } from './calendarpage.js';
-import { storeCard } from './admin.js';
+import { storeCard, bookingEditorNode } from './admin.js';
 
 export function createStoreCalendarView() {
-  return createCalendarPage({
+  // 劇本清單（含每個角色可選的主持人）：編輯畫面要用。第一次按「編輯」才抓，
+  // 之後沿用——只是看日曆的人不該為了一個他沒打開的表單多打一支 API。
+  let scriptsPromise = null;
+  const loadScripts = () => (scriptsPromise ??= api.get('/api/admin/mmg'));
+
+  // 目前打開的那一張編輯表單（同一時間只有一張）。
+  let editing = null;
+  const dirty = () => Boolean(editing)
+    && JSON.stringify(editing.b.editing) !== editing.b.snapshot;
+
+  /** 有沒存的修改就先問一次。回傳 false 代表他選擇留下。 */
+  async function canLeave() {
+    // 他選擇離開（或根本沒改）就把表單一起忘掉：清單接著會重畫，那張表單
+    // 已經不在畫面上了，留著它的話下一次會被誤判成「還有沒存的修改」。
+    if (!dirty()) { editing = null; return true; }
+    const ok = await confirmDialog({
+      title: '尚未儲存',
+      body: '目前修改尚未儲存，是否確認退出？',
+      confirmText: '退出不儲存',
+      cancelText: '留在這裡',
+      danger: true,
+    });
+    if (ok) editing = null;
+    return ok;
+  }
+
+  /**
+   * 在那張卡片的位置展開編輯表單。用的是場次管理同一張（bookingEditorNode），
+   * 所以忙碌日、撞期、訂金那幾道檢查一道都不少。
+   */
+  async function openEditor(item, card) {
+    if (!await canLeave()) return;
+    let data;
+    try {
+      data = await loadScripts();
+    } catch (err) {
+      scriptsPromise = null;   // 下次再按要能重試，不要把失敗記住
+      toast(err.message, { error: true });
+      return;
+    }
+    const b = {
+      editing: JSON.parse(JSON.stringify(item)),
+      snapshot: JSON.stringify(item),
+      busyInfo: null,
+      tab: item.status,
+    };
+    const holder = el('div', {});
+    const draw = () => {
+      clear(holder);
+      holder.append(bookingEditorNode({
+        b,
+        scripts: data.items,
+        gmCandidates: data.gm_candidates,
+        users: [],   // 這裡只編輯既有的場次，用不到預訂者清單
+        rerender: draw,
+        onCancel: async () => {
+          if (!await canLeave()) return;
+          editing = null;
+          page.reload();
+        },
+        // 存完重抓整個月與這一天：日期或狀態改了，點的顏色、那一格有沒有點
+        // 都會跟著變，只換掉這一張卡片是不夠的。
+        onSaved: () => { editing = null; page.reload(); },
+      }));
+    };
+    editing = { b };
+    draw();
+    card.replaceWith(holder);
+  }
+
+  const page = createCalendarPage({
     loadMonth: async (ym) => (await api.get(`/api/admin/bookings/month/${ym}`)).days,
     loadDay: (iso) => api.get(`/api/admin/bookings/date/${iso}`),
     // ★ 借用玩家那支端點不是偷懶：它回的是「這家店到得了的狀態」
@@ -30,7 +100,11 @@ export function createStoreCalendarView() {
         .filter(([key]) => key !== 'cancelled')
         .map(([key, label]) => ({ key, label }));
     },
-    renderItem: (item) => storeCard(item, { showStatus: true }),
+    renderItem: (item) => {
+      const card = storeCard(item, { showStatus: true, onEdit: () => openEditor(item, card) });
+      return card;
+    },
+    canLeave,
     emptyText: '這天沒有場次',
     moreText: '這天的場次太多，其餘請到場次管理查看',
     // 店家忙碌日：那天整家店不開，玩家一律訂不到（比排期的每一層都高）。
@@ -52,5 +126,6 @@ export function createStoreCalendarView() {
           })
         : Promise.resolve(true),
     },
-  }).node;
+  });
+  return page.node;
 }
