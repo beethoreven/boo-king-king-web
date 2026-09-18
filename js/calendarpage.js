@@ -250,14 +250,18 @@ export function createCalendarPage({
       ]))));
   }
 
-  /** 一格底下的點。四場以上改成一條線（案主定案，見 MAX_DOTS）。 */
+  /**
+   * 一格底下的點。四場以上改成一條線（案主定案，見 MAX_DOTS）。
+   *
+   * ★ 沒有場次的日子也回傳這一列，只是裡面是空的。省掉的話，有點的格子
+   *   會把數字往上擠，整個月的數字就高高低低——案主 2026-09-18 在線上
+   *   看到的就是這個。寧可每一格都先空出這 6px，也不要歪。
+   */
   function marks(statuses) {
-    if (!statuses.length) return null;
-    if (statuses.length > MAX_DOTS) {
-      return el('span', { class: 'cal-line', 'aria-hidden': 'true' });
-    }
-    return el('span', { class: 'cal-marks', 'aria-hidden': 'true' },
-      statuses.map((s) => el('span', { class: `cal-dot cal-dot--${s}` })));
+    const inner = statuses.length > MAX_DOTS
+      ? [el('span', { class: 'cal-line' })]
+      : statuses.map((s) => el('span', { class: `cal-dot cal-dot--${s}` }));
+    return el('span', { class: 'cal-marks', 'aria-hidden': 'true' }, inner);
   }
 
   function renderGrid() {
