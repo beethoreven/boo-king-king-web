@@ -1147,17 +1147,6 @@ export function createAdminView({ tab, sub } = {}) {
     return el('div', {}, nodes);
   }
 
-  /**
-   * 這場還沒「有人確認」的角色，回傳可以直接顯示的說明字串。
-   *
-   * 沒指派到人也算數：一個角色掛著空位，跟掛著一個還沒點頭的人，對
-   * 「這場到底成不成立」來說是同一件事——都還沒有人答應要帶。
-   *
-   * 讀的是畫面上當下的值（item.gm_user_ids / item.gm_confirmed），不是
-   * 資料庫載入時的值。管理員可能在同一個表單裡先勾了確認再改狀態，
-   * 那就該以他眼前看到的為準。
-   */
-
   function renderBookingEditor() {
     const b = state.bookings;
     return bookingEditorNode({
@@ -1494,6 +1483,16 @@ async function submitBooking(path, body, { create = false } = {}) {
  *
  * ★ 各寫一份的話，忙碌日、撞期、訂金那幾道檢查就會一邊有一邊沒有：同一個
  *   動作兩扇門、其中一扇守衛比較少，遲早有人走那一扇。
+ */
+/**
+ * 這場還沒「有人確認」的角色，回傳可以直接顯示的說明字串。
+ *
+ * 沒指派到人也算數：一個角色掛著空位，跟掛著一個還沒點頭的人，對
+ * 「這場到底成不成立」來說是同一件事——都還沒有人答應要帶。
+ *
+ * 讀的是畫面上當下的值（item.gm_user_ids / item.gm_confirmed），不是
+ * 資料庫載入時的值。管理員可能在同一個表單裡先勾了確認再改狀態，
+ * 那就該以他眼前看到的為準。
  */
 function unconfirmedRoles(item, mmg) {
   const out = [];
