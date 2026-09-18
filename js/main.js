@@ -220,11 +220,32 @@ function menuIcon() {
   return svg;
 }
 
+/**
+ * 成對的兩個畫面：在其中一個時，頂欄多一顆切到另一個的按鈕。
+ *
+ * ★ 這是上面「從子介面只能回到預約畫面，不能互跳」那條規則的例外，而且是
+ *   刻意的：場次確認與指定行事曆是同一件事的兩種看法（同一批場次，一個按
+ *   狀態分、一個按日期分），不是兩個工作區域。互跳不會讓人搞不清自己在哪。
+ *
+ * 按鈕放在「回到預約」的左邊（案主指定）。
+ */
+const PAIRED = {
+  // 這家店沒有主持人介面（single 模式），所以目前沒有成對的畫面。
+  // 場次行事曆做好之後，管理員介面那一對會加在這裡。
+};
+
 function renderTopbar() {
   const user = getUser();
   const actions = [];
 
   if (user) {
+    const pair = PAIRED[currentView];
+    if (pair && hasRole(VIEWS[pair.to].minRole)) {
+      actions.push(el('button', {
+        class: 'btn btn--ghost btn--small',
+        onClick: () => switchView(pair.to),
+      }, pair.label));
+    }
     // 切換入口：只顯示「不是目前這個」而且權限夠的。
     // role 3 兩個都看不到，所以完全沒有切換點。
     for (const [key, view] of Object.entries(VIEWS)) {
