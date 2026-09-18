@@ -19,6 +19,7 @@
  */
 
 import { api } from './api.js';
+import { confirmDialog } from './ui.js';
 import { createCalendarPage } from './calendarpage.js';
 import { TABS, gmCard, confirmGmBooking } from './gm.js';
 
@@ -40,6 +41,23 @@ export function createGmCalendarView() {
     }),
     emptyText: '這天沒有指定給你的場次',
     moreText: '這天的場次太多，其餘請到場次確認頁查看',
+    // 自己的忙碌日：標起來之後，那天**誰都不能把場次指定給你**，管理員也不行。
+    // 要讓他排，得自己先來這裡取消。
+    busy: {
+      load: async (ym) => (await api.get(`/api/gm/busy/${ym}`)).dates,
+      set: (iso) => api.post('/api/gm/busy', { date: iso }),
+      clear: (iso) => api.del(`/api/gm/busy/${iso}`),
+      beforeSet: (iso, statuses) => statuses.length
+        ? confirmDialog({
+            title: '這天已經有指定給你的場次',
+            body: `${iso} 已經有 ${statuses.length} 場指定給你。\n\n`
+                + '設成忙碌日不會取消它們，只是之後不能再把新的場次指定給你。\n'
+                + '既有的那幾場請直接跟管理員確認。',
+            confirmText: '仍要設為忙碌日',
+            danger: true,
+          })
+        : Promise.resolve(true),
+    },
   });
   return page.node;
 }

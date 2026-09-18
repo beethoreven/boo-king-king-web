@@ -41,9 +41,17 @@ const MAX_DOTS = 3;
  * @param {(item: object) => Node} opts.renderItem           清單裡的一項
  * @param {string} opts.emptyText                            這天沒有東西時說什麼
  * @param {string} opts.moreText                             一天超過一頁時說什麼
+ * @param {object} [opts.busy]                               忙碌日。沒給就不出現那顆按鈕
+ * @param {(ym: string) => Promise<string[]>} opts.busy.load  這個月哪幾天是忙碌日
+ * @param {(iso: string) => Promise} opts.busy.set
+ * @param {(iso: string) => Promise} opts.busy.clear
+ * @param {(iso, statuses) => Promise<boolean>} [opts.busy.beforeSet]
+ *        設定前問一次。回 false 就不設——那天已經有場次時要先警告（案主定案：
+ *        警告過還是要設就讓他設）。statuses 是那天的點，畫面手上本來就有，
+ *        所以不必為了問「那天有沒有場次」多打一支 API。
  */
 export function createCalendarPage({
-  loadMonth, loadDay, loadLegend, renderItem, emptyText, moreText,
+  loadMonth, loadDay, loadLegend, renderItem, emptyText, moreText, busy,
 }) {
   const root = el('div', { class: 'view' });
   const today = new Date();
@@ -62,6 +70,9 @@ export function createCalendarPage({
     // 圖例。跟頁籤同一份清單（後端依這家店的功能表給），所以不收訂金的店
     // 不會出現「等待支付訂金」那個顏色。
     legend: [],
+    // 這個月的忙碌日（ISO 字串）。格子塗灰用。
+    busyDates: new Set(),
+    busyWorking: false,
   };
 
   // 過期的回應不要蓋掉比較新的結果——寫法與理由見 admin.js 的同一段。
@@ -92,6 +103,42 @@ export function createCalendarPage({
   const fieldMonth = numberField('MM', 1, 12);
   const fieldDay = numberField('DD', 1, 31);
 
+  // 忙碌日的按鈕就放在年月日那一排右邊（案主 2026-09-18：那裡剛好還有位置，
+  // 放下去一排剛好滿）。沒選日期時按不下去——它作用在「選中的那一天」。
+  const busyBtn = busy
+    ? el('button', { class: 'btn btn--ghost btn--small', onClick: () => toggleBusy() }, '設定忙碌日')
+    : null;
+
+  function syncBusyBtn() {
+    if (!busyBtn) return;
+    const on = state.selected && state.busyDates.has(state.selected);
+    busyBtn.textContent = on ? '取消忙碌日' : '設定忙碌日';
+    busyBtn.disabled = !state.selected || state.busyWorking;
+  }
+
+  /** 設定或取消「選中那一天」的忙碌日。 */
+  async function toggleBusy() {
+    if (!busy || !state.selected || state.busyWorking) return;
+    const iso = state.selected;
+    const on = state.busyDates.has(iso);
+    // 設定前問一次（那天已經有場次時）。取消不必問：取消只是讓那天恢復
+    // 正常，不會讓任何已經存在的東西失效。
+    if (!on && busy.beforeSet
+        && !await busy.beforeSet(iso, state.days[iso] ?? [])) return;
+    state.busyWorking = true;
+    syncBusyBtn();
+    try {
+      await (on ? busy.clear(iso) : busy.set(iso));
+      toast(on ? '已取消忙碌日' : '已設定忙碌日');
+    } catch (err) {
+      toast(err.message, { error: true });
+    }
+    state.busyWorking = false;
+    // 重抓整個月：忙碌日改了，那一格要跟著變灰或變回來。
+    fetchMonth();
+    syncBusyBtn();
+  }
+
   root.append(
     el('div', { class: 'section' }, [
       el('div', { class: 'cal__head' }, [
@@ -111,6 +158,7 @@ export function createCalendarPage({
         fieldYear, el('span', { class: 'dt-unit' }, '年'),
         fieldMonth, el('span', { class: 'dt-unit' }, '月'),
         fieldDay, el('span', { class: 'dt-unit' }, '日'),
+        busyBtn,
       ]),
       el('div', { class: 'field__hint' }, '輸入年月日可以直接跳到那一天'),
     ]),
@@ -135,20 +183,29 @@ export function createCalendarPage({
     state.daysFailed = false;
     renderGrid();
     try {
-      const days = await loadMonth(`${state.year}-${pad(state.month)}`);
+      const ym = `${state.year}-${pad(state.month)}`;
+      // 點與忙碌日一起抓：兩者都是「這個月的格子長什麼樣」，分兩次抓會讓
+      // 格子先畫出來再變灰，看起來像閃一下。
+      const [days, busyDates] = await Promise.all([
+        loadMonth(ym),
+        busy ? busy.load(ym) : Promise.resolve([]),
+      ]);
       if (mine !== monthSeq) return;
       state.days = days ?? {};
+      state.busyDates = new Set(busyDates ?? []);
     } catch (err) {
       if (mine !== monthSeq) return;
       // ★ 「讀不到」與「這個月沒有場次」要分開。兩者的格子都是空的，但一個
       //   是系統壞了、一個是真的沒事——混在一起的話，一次網路失敗會被讀成
       //   「我這個月沒有預約」。
       state.days = {};
+      state.busyDates = new Set();
       state.daysFailed = true;
       toast(err.message, { error: true });
     }
     state.daysLoading = false;
     renderGrid();
+    syncBusyBtn();
   }
 
   async function fetchDay(iso) {
@@ -178,6 +235,7 @@ export function createCalendarPage({
   function pickDay(iso) {
     state.selected = iso;
     syncFields();
+    syncBusyBtn();
     renderGrid();
     fetchDay(iso);
   }
@@ -196,6 +254,7 @@ export function createCalendarPage({
     state.itemsLoading = false;
     state.itemsFailed = false;
     syncFields();
+    syncBusyBtn();
     renderList();
     fetchMonth();
   }
@@ -206,6 +265,7 @@ export function createCalendarPage({
     state.year = y;
     state.month = m;
     state.selected = isoOf(y, m, d);
+    syncBusyBtn();
     if (!sameMonth) fetchMonth(); else renderGrid();
     fetchDay(state.selected);
   }
@@ -275,13 +335,17 @@ export function createCalendarPage({
     }
     grid.append(...monthCells(state.year, state.month, (iso, d) => {
       const statuses = state.days[iso] ?? [];
+      const isBusy = state.busyDates.has(iso);
       return el('button', {
         type: 'button',
-        class: `cal__day cal__day--mark${iso === state.selected ? ' is-selected' : ''}`,
-        // 顏色對讀螢幕的人沒有意義，所以把「幾場」講出來。
-        'aria-label': statuses.length
-          ? `${state.month} 月 ${d} 日，${statuses.length} 場`
-          : `${state.month} 月 ${d} 日`,
+        class: `cal__day cal__day--mark${iso === state.selected ? ' is-selected' : ''}`
+             + `${isBusy ? ' is-busy' : ''}`,
+        // 顏色（點與灰底）對讀螢幕的人沒有意義，所以把話講出來。
+        'aria-label': [
+          `${state.month} 月 ${d} 日`,
+          isBusy ? '忙碌日' : '',
+          statuses.length ? `${statuses.length} 場` : '',
+        ].filter(Boolean).join('，'),
         onClick: () => pickDay(iso),
       }, [el('span', { class: 'cal__day-num' }, String(d)), marks(statuses)]);
     }));
@@ -317,6 +381,7 @@ export function createCalendarPage({
   }
 
   syncFields();
+  syncBusyBtn();
   renderGrid();
   renderList();
   fetchLegend();

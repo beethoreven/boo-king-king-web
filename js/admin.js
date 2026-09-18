@@ -1173,6 +1173,39 @@ export function createAdminView({ tab, sub } = {}) {
     const mmg = state.mmg.items.find((m) => m.id === item.mmg_id);
 
     const isNew = !item.id;
+    // 這一筆打開時的樣子。「狀態有沒有被改」「這次新指定了誰」「有沒有改期」
+    // 都跟它比——見存檔那一段的說明。
+    const original = isNew || !b.snapshot ? null : JSON.parse(b.snapshot);
+
+    // 忙碌日的提醒。節點在這一次重畫裡建立，查詢結果回來時直接改它們的字，
+    // **不重畫整張表單**：改日期的當下管理員可能還在打字（理由見下面日期那格）。
+    const storeBusyNode = el('div', { class: 'field__warn' });
+    const gmBusyNodes = [];
+    const busyKey = () => `${item.session_date}|${item.gm_user_ids.join(',')}`;
+
+    function paintBusy() {
+      const info = b.busyInfo && b.busyInfo.key === busyKey() ? b.busyInfo : null;
+      const moved = !original || item.session_date !== original.session_date;
+      storeBusyNode.textContent = info?.store_busy && moved
+        ? '這天是店家忙碌日，儲存前會再請你確認一次' : '';
+      const blocked = new Set(assignedThisTime(item, original));
+      gmBusyNodes.forEach((node, i) => {
+        if (!node) return;
+        const uid = item.gm_user_ids[i];
+        const hit = info?.busy_gms.find((g) => g.id === uid);
+        node.textContent = hit && blocked.has(uid)
+          ? `${hit.name}這天是忙碌日，不能指派` : '';
+      });
+    }
+
+    async function refreshBusy() {
+      const key = busyKey();
+      const got = await fetchBusy(item.session_date, item.gm_user_ids);
+      // 期間又改了日期或主持人的話，這一份已經過期，不要蓋上去。
+      if (key !== busyKey()) return;
+      b.busyInfo = { ...got, key };
+      paintBusy();
+    }
 
     // ── 場次類型與訂金 ──
     //
@@ -1213,7 +1246,7 @@ export function createAdminView({ tab, sub } = {}) {
       ariaLabel: '場次類型',
     });
 
-    return el('div', { class: 'section' }, [
+    const editorNode = el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, isNew ? '新增場次' : `編輯場次 #${item.id}`),
       // 既有場次的劇本與預訂者只顯示不編輯（改這兩者等於變成另一筆預約）；
       // 新增時當然要選。
@@ -1254,6 +1287,8 @@ export function createAdminView({ tab, sub } = {}) {
             type: 'date', value: item.session_date,
             onChange: (e) => {
               item.session_date = e.target.value;
+              // 換了日期，忙碌日的提醒要跟著重算（只改那幾行字，不重畫）。
+              refreshBusy();
               // 換了日期就依新日期重推場次類型（週六日＝假日場）。手動改過的
               // 類型是針對原本那一天的，換一天就不再成立。
               const t = dayTypeOf(item.session_date);
@@ -1267,6 +1302,7 @@ export function createAdminView({ tab, sub } = {}) {
         }),
         field({ label: '時間', control: el('input', { type: 'time', step: '1800', value: item.session_time, onChange: (e) => { item.session_time = e.target.value; } }) }),
       ]),
+      storeBusyNode,
       el('div', { class: 'row' }, [
         // 國定假日、補班日系統不知道，要在這裡手動改。已成立的場次改了類型
         // 不會退回待收訂金（後端也不會），差額看下面訂金那一格的提示。
@@ -1305,6 +1341,7 @@ export function createAdminView({ tab, sub } = {}) {
               ariaLabel: `${slot.name} 的主持人`,
             }),
           }),
+          (gmBusyNodes[i] = el('div', { class: 'field__warn' })),
           el('label', { class: 'checkline' }, [
             el('input', {
               type: 'checkbox',
@@ -1325,6 +1362,38 @@ export function createAdminView({ tab, sub } = {}) {
         el('button', {
           class: 'btn btn--primary btn--small',
           onClick: async () => {
+            // 忙碌日排在所有檢查前面：主持人忙碌日是硬擋，後面的撞期檢查
+            // 問了也沒用；店家忙碌日要他先表態，否則後面那幾個對話框都白答。
+            //
+            // ★ 多個問題就在同一個對話框列多句（案主 2026-09-18）。
+            const moved = !original || item.session_date !== original.session_date;
+            const busyInfo = await fetchBusy(item.session_date, item.gm_user_ids);
+            const assigned = new Set(assignedThisTime(item, original));
+            const busyGms = busyInfo.busy_gms.filter((g) => assigned.has(g.id));
+            if (busyGms.length) {
+              const lines = busyGms.map((g) => `${g.name}：${BUSY_GM_MSG}`);
+              if (busyInfo.store_busy && moved) lines.push(BUSY_STORE_MSG);
+              // 只有一顆「取消」：這裡沒有東西可以確認，寫「確認」會讓人以為
+              // 按下去就存進去了（同 conflicts.js 的 blockDialog）。
+              await confirmDialog({
+                title: '主持人當天是忙碌日',
+                body: lines.join('\n\n'),
+                confirmText: '取消',
+                cancelText: null,
+              });
+              return;
+            }
+            if (busyInfo.store_busy && moved) {
+              const ok = await confirmDialog({
+                title: '這天是店家忙碌日',
+                body: BUSY_STORE_MSG,
+                confirmText: '店家有開放，仍要儲存',
+                cancelText: '取消',
+                danger: true,
+              });
+              if (!ok) return;
+            }
+
             if (isNew) {
               // 新增不做前端撞期檢查：create_booking() 在後端就會擋下
               // 劇本撞期與主持人撞期並回錯誤訊息。這裡再問一次只是多一支
@@ -1346,11 +1415,12 @@ export function createAdminView({ tab, sub } = {}) {
               return;
             }
 
-            const target = item.status ?? b.tab;
-            // 清單那一包沒有 status 欄位（子頁籤本身就是狀態），所以原本
-            // 的狀態就是當前頁籤。
-            const statusChanged = target !== b.tab;
-            const original = b.data[b.tab]?.items.find((x) => x.id === item.id);
+            // ★ 跟這一筆「打開時的樣子」比，不跟當前子頁籤比（2026-09-18 改）。
+            //   原本清單項目沒有 status，只能拿子頁籤當原本的狀態——那在場次
+            //   管理剛好成立，但從別的地方打開編輯器時根本沒有子頁籤可比，每一次
+            //   存檔都會被當成改了狀態：多打一次撞期檢查，還會問「還是要切換嗎」。
+            const target = item.status;
+            const statusChanged = !original || target !== original.status;
             const newlyConfirmed = Boolean(original) && item.gm_confirmed
               .some((v, i) => v && !original.gm_confirmed[i]);
 
@@ -1375,6 +1445,12 @@ export function createAdminView({ tab, sub } = {}) {
         }, isNew ? '新增' : '儲存'),
       ]),
     ]);
+
+    // 打開編輯畫面、或換了主持人（那兩種都會走到這裡重畫）時查一次忙碌日。
+    // 結果回來之前先用手上那一份畫，免得紅字閃一下又出現。
+    if (item.session_date && b.busyInfo?.key !== busyKey()) refreshBusy();
+    else paintBusy();
+    return editorNode;
   }
 
   // ── 主渲染 ──────────────────────────────────────────────
@@ -1608,6 +1684,47 @@ export function storeCard(item, { onEdit, showStatus = false } = {}) {
   ]);
 }
 
+
+// ── 忙碌日（場次管理的編輯畫面用）─────────────────────────────
+//
+// 兩種忙碌日的處置不同（見後端 db/busy.py）：
+//   店家忙碌日   可以放行——管理員這條路本來就不問排期——但要先過一個對話框
+//   主持人忙碌日 硬擋，管理員也不能放行（案主 2026-09-18）
+//
+// 這兩句話是案主給的原文，不要改寫。
+
+const BUSY_STORE_MSG = '當天已經被標記為店家忙碌日，請確定當天店家有開放服務再下定。';
+const BUSY_GM_MSG = '主持人將當天設定為忙碌日，管理員不能在當日為其指派場次，'
+  + '請與主持人確認後，主持人解除忙碌日再指派。';
+
+/**
+ * 某一天的忙碌狀況。**這是提醒不是把關**——後端存檔時會再擋一次，所以查不到
+ * 就當作不忙，不要讓一次查詢失敗卡住整個編輯畫面。
+ */
+async function fetchBusy(date, gmIds) {
+  if (!date) return { store_busy: false, busy_gms: [] };
+  try {
+    return await api.get('/api/admin/busy/check', {
+      date, gm: (gmIds || []).filter(Boolean).join(','),
+    });
+  } catch (err) {
+    toast(`忙碌日檢查失敗：${err.message}`, { error: true });
+    return { store_busy: false, busy_gms: [] };
+  }
+}
+
+/**
+ * 這次存檔「動到指定」的主持人：新指定的，或整筆被搬到另一天時掛著的全部。
+ *
+ * ★ 主持人忙碌日只擋這些，跟後端 bookings_admin.update 同一條規則：一位主持人
+ *   事後才把某天標成忙碌，不該讓管理員連那一場的備註都改不了——善後正是他
+ *   這時候要做的事。
+ */
+function assignedThisTime(item, original) {
+  const moved = !original || item.session_date !== original.session_date;
+  const before = new Set((original?.gm_user_ids ?? []).filter(Boolean));
+  return item.gm_user_ids.filter((u) => u && (moved || !before.has(u)));
+}
 
 function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
