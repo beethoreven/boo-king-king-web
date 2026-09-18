@@ -1166,6 +1166,12 @@ export function createAdminView({ tab, sub } = {}) {
         // 會像是什麼都沒發生。回第一頁同理。
         const landed = item.status ?? 'gm_confirm';
         closeEditor(b);
+        // ★ 那個子頁籤不一定在畫面上：頁籤只列這家店「到得了」的狀態（見後端
+        //   reachable_tabs）。落點不在清單裡時整包重抓——重抓之後，真的有那個
+        //   狀態的列時頁籤就會出現。原本這裡直接寫 b.data[landed].start，
+        //   對不上就是 TypeError：場次已經建好了，表單卻卡在畫面上、沒有任何
+        //   訊息（2026-09-18 在 eli 的組態下實測抓到）。
+        if (!b.data[landed]) { loadBookings(); return; }
         b.tab = landed;
         b.data[landed].start = 1;
         b.draft = { ...b.data[landed].filters };
