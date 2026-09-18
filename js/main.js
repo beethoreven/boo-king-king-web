@@ -18,6 +18,7 @@ import { refreshStatus, logout, getUser, hasRole, renderGoogleButton,
 import { el, clear, toast } from './ui.js';
 import { createBookingView } from './booking.js';
 import { createAdminView } from './admin.js';
+import { createStoreCalendarView } from './storecalendar.js';
 import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
 import { createMyBookingsView } from './mybookings.js';
@@ -39,6 +40,9 @@ if (!SITE_NAME) throw new Error('index.html 沒有填 __BOO_KING_KING_SITE_NAME_
 
 const VIEWS = {
   booking: { label: '預約', minRole: 3, build: () => createBookingView() },
+  // 管理員介面的另一種看法：場次管理按狀態分子頁籤，這一頁按日期。
+  storecalendar: { label: '場次行事曆', minRole: 1, menuOnly: true,
+    build: () => createStoreCalendarView() },
   admin: { label: '管理員介面', minRole: 1, build: (route) => createAdminView(route) },
   // 選單裡的頁面。不放進頂欄的切換按鈕，所以 minRole 只是形式上的下限。
   profile: {
@@ -71,6 +75,7 @@ const VIEWS = {
  */
 const VIEW_SLUG = {
   booking: 'booking',   // 是預設值，實際上不會寫進網址（見 route.js）
+  storecalendar: 'storecalendar',
   admin: 'admin',
   profile: 'account',
   mybookings: 'mybookings',
@@ -230,9 +235,30 @@ function menuIcon() {
  * 按鈕放在「回到預約」的左邊（案主指定）。
  */
 const PAIRED = {
-  // 這家店沒有主持人介面（single 模式），所以目前沒有成對的畫面。
-  // 場次行事曆做好之後，管理員介面那一對會加在這裡。
+  admin: { to: 'storecalendar', label: '場次行事曆' },
+  storecalendar: { to: 'admin', label: '回到前一頁' },
 };
+
+// 成對切換時，記住他離開那個畫面時停在哪一個頁籤。
+//
+// ★ 沒有這個的話，「回到前一頁」會把人丟回管理員介面的第一節（劇本管理），
+//   而他明明是從場次管理過去的——那顆按鈕上寫著「回到前一頁」，它就該真的
+//   回到前一頁。切畫面本來會清掉 tab/sub（那是對的，子頁籤依附在頁籤上），
+//   所以要在離開前自己記下來。
+const lastPlace = {};
+
+function switchPaired(to) {
+  const here = readRoute();
+  lastPlace[currentView] = { tab: here.tab, sub: here.sub };
+  const back = lastPlace[to] ?? {};
+  currentView = to;
+  pushRoute({
+    view: viewRoute.toSlug(to),
+    tab: back.tab ?? null,
+    sub: back.sub ?? null,
+  });
+  renderApp();
+}
 
 function renderTopbar() {
   const user = getUser();
@@ -243,7 +269,7 @@ function renderTopbar() {
     if (pair && hasRole(VIEWS[pair.to].minRole)) {
       actions.push(el('button', {
         class: 'btn btn--ghost btn--small',
-        onClick: () => switchView(pair.to),
+        onClick: () => switchPaired(pair.to),
       }, pair.label));
     }
     // 切換入口：只顯示「不是目前這個」而且權限夠的。

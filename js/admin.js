@@ -958,24 +958,7 @@ export function createAdminView({ tab, sub } = {}) {
     }
 
     nodes.push(el('div', { class: 'section' }, el('div', { class: 'list' }, t.items.map((item) =>
-      el('div', { class: 'card list-item' }, [
-        el('div', { class: 'list-item__main' }, [
-          el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
-          el('div', { class: 'list-item__meta' }, [
-            `${item.session_date} ${item.session_time} · ${item.player_name}`,
-          ]),
-          noteLine(item.note),
-        ]),
-        el('div', { class: 'list-item__side' },
-          // 補上 status 再進編輯畫面。清單那一包刻意沒有這個欄位（子頁籤
-          // 本身就是狀態），但編輯畫面要把它送回後端——不補的話，只要
-          // 管理員沒動那個下拉，送出去的 status 就是 undefined，後端收到
-          // None 直接退件「未知的狀態」。任何「不改狀態的儲存」都會失敗。
-          el('button', {
-            class: 'btn btn--ghost btn--small',
-            onClick: () => openEditor(b, { ...deepCopy(item), status: b.tab }),
-          }, '編輯')),
-      ]),
+      storeCard(item, { onEdit: () => openEditor(b, deepCopy(item)) }),
     ))));
 
     if (t.start > 1 || t.has_more) {
@@ -1326,6 +1309,36 @@ function fmtTime(iso) {
   const p = (n) => String(n).padStart(2, '0');
   return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/**
+ * 全站視角的一張場次卡片。**場次管理的清單與場次行事曆共用這一張。**
+ *
+ * 各畫一份的話，只要有人改了其中一邊，同一場戲在兩個畫面上就會長得不一樣，
+ * 而那種不一致不會有任何錯誤訊息。
+ *
+ * showStatus：行事曆的某一天混著各種狀態，所以每一項最下面補一行狀態；
+ * 場次管理那邊狀態就是子頁籤本身，再寫一次是多的。
+ *
+ * onEdit 沒給就不出現編輯鈕——唯讀的地方用得上。
+ */
+export function storeCard(item, { onEdit, showStatus = false } = {}) {
+  return el('div', { class: 'card list-item' }, [
+    el('div', { class: 'list-item__main' }, [
+      el('div', { class: 'list-item__title' }, scriptName(item.mmg_name, item.mmg_url)),
+      // 這家店只有一位主持人、也不收訂金，所以沒有「主持」連結與訂金那一行
+      // ——差異在這裡，不在呼叫端。
+      el('div', { class: 'list-item__meta' }, [
+        `${item.session_date} ${item.session_time} · ${item.player_name}`,
+      ]),
+      noteLine(item.note),
+      showStatus && el('div', { class: 'list-item__meta list-item__status' },
+        item.status_label ?? item.status),
+    ]),
+    el('div', { class: 'list-item__side' },
+      onEdit ? el('button', { class: 'btn btn--ghost btn--small', onClick: onEdit }, '編輯') : null),
+  ]);
+}
+
 
 function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
