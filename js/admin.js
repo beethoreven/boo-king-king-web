@@ -139,7 +139,12 @@ const emptyUser = () => ({
 const emptyBooking = () => ({
   id: null, mmg_id: null, player_id: null,
   // day_type 在選了日期之後才推得出來；在那之前是 null，送出去後端會依日期推。
-  session_date: '', session_time: '', day_type: null, status: 'gm_confirm',
+  // ★ 預設是「已成立」，不是 gm_confirm：這家店不收訂金、只有一位主持人，
+  //   不存在「等待主持人確認」這一步（下拉裡也沒有這個選項）。原本寫的是
+  //   gm_confirm——下拉顯示第一項「已成立」，送出去的卻是 gm_confirm，後端又用
+  //   表單的狀態覆蓋推導出來的狀態，於是場次管理新增的每一筆，只要沒碰過下拉，
+  //   就會被存成一個這家店走不到、也沒有人會去確認的狀態（2026-09-18 發現）。
+  session_date: '', session_time: '', day_type: null, status: 'booked',
   note: '',
   gm_user_ids: [null, null, null, null],
   gm_confirmed: [false, false, false, false],
