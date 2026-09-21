@@ -35,6 +35,21 @@ export function getUser() {
   return currentUser;
 }
 
+/**
+ * 把「我是誰」的狀態整組清掉。
+ *
+ * ★ 這三個是一組的，不能只清一半。原本 logout() 只清 currentUser，
+ *   pendingRegistration 留著——結果在註冊畫面按「取消」時，登出確實做了
+ *   （後端回 200、token 也清了），但 start() 重新判斷時還是看到「待註冊」，
+ *   又把註冊畫面畫回來，看起來就像按鈕沒反應（2026-09-21 案主回報）。
+ *   同樣的洞在停權畫面按登出也會中。
+ */
+function clearIdentity() {
+  currentUser = null;
+  pendingRegistration = null;
+  blockedStatus = null;
+}
+
 /** 已登入但還沒註冊時回傳 { email }，否則 null。 */
 export function getPendingRegistration() {
   return pendingRegistration;
@@ -62,7 +77,8 @@ export function hasRole(minimum) {
  */
 export async function refreshStatus() {
   if (!getToken()) {
-    currentUser = null;
+    // 沒有 token 就是「什麼身分都沒有」，待註冊與停權也一起清掉。
+    clearIdentity();
     return null;
   }
   try {
@@ -83,9 +99,7 @@ export async function refreshStatus() {
     return currentUser;
   } catch {
     // 401 已經在 api.js 清掉 token 並觸發 handler
-    currentUser = null;
-    pendingRegistration = null;
-    blockedStatus = null;
+    clearIdentity();
     return null;
   }
 }
@@ -132,7 +146,17 @@ export async function logout() {
     // 後端說不行也沒關係——本地清掉 token，登出的目的就達成了
   }
   setToken(null);
-  currentUser = null;
+  clearIdentity();
+  // Google 那一側能做的只有這一件事：關掉「下次自動用同一個帳號登入」。
+  // 我們登不出使用者的 Google 帳號，那是瀏覽器裡 Google 自己的登入狀態。
+  //
+  // ★ 目前 initialize() 沒有開 auto_select、也沒有用 One Tap，所以這一行
+  //   現在是空跑；哪天要開 One Tap，少了它就會變成「按了登出又被自動登回來」。
+  try {
+    window.google?.accounts?.id?.disableAutoSelect?.();
+  } catch {
+    // Google 的 script 還沒載到就算了，本地狀態已經清乾淨
+  }
 }
 
 /**
