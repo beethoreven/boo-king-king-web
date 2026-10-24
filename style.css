@@ -1,81 +1,53 @@
 /*
  * 設計 token 與共用元件樣式。
  *
- * 這家店是**淺色 only**（2026-09-11 定案）。色值取樣自《豪門驚情系列》
- * 的 Notion 站，主彩是深棕；步經徑那份深底黃銅換了一個底重新打光——
- * 同一個色系家族，明暗翻過來。
- *
- * 沒有 prefers-color-scheme 分支，是刻意的：雙主題要每個顏色兩套、
- * color-scheme 跟著切、陰影也要兩套，而這裡要的是換底不是加一個模式。
- *
+ * 配色來自設計稿定案的方向：深色底 + 黃銅色點綴（C 的結構 + B 的配色）。
  * 所有顏色一律走這裡的變數，不要在別處寫死色碼——之後要調色只改這一區。
  */
 
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;      /* 卡片、彈起的區塊 */
-  --surface-2: #faf9f8;    /* 輸入框等比背景略暗一階的表面 */
-  --border: #e6e5e3;
-  --border-soft: #f1f0ee;
+  --bg: #14120f;
+  --surface: #1e1b17;      /* 卡片、彈起的區塊 */
+  --surface-2: #1a1713;    /* 輸入框等比背景略亮一階的表面 */
+  --border: #332d24;
+  --border-soft: #2a251e;
 
-  /* ★ 2026-09-14 整組壓深一階。原本那組（#2c2c2b / #6b6a67 / #9b9a97 /
-     #c4c3c0）是從取樣站量來的，但那個站的版面留白多、字級大；搬到這個
-     介面上——資訊密度高、字級 13~14px——在純白底上就顯得太淡。
-     深色底那版可以靠對比撐住，白底沒有這個餘裕。 */
-  --ink: #141413;          /* 內文。近黑，不是純黑：純黑在白底上邊緣會刺 */
-  --ink-soft: #45443f;     /* 次要說明 */
-  --ink-faint: #6b6a66;    /* 提示、未選中的頁籤 */
-  --ink-disabled: #a3a29e; /* 停用 */
+  --ink: #ede8e0;
+  --ink-soft: #a79c8e;
+  --ink-faint: #8a8177;
+  --ink-disabled: #5c564c;
 
-  /* 深棕。--on-accent 是「放在 accent 底色上的字」，用淺米——那是取樣站
-     「民國」標籤的配色翻過來（原本淺米底深棕字），對比 6.0 : 1。
-     ★ 淺米字只能出現在深色底上：放在白底只有 1.3 : 1，等於看不見。
-       所以有色文字一律用 --accent，不要用 --on-accent。 */
-  --accent: #655121;
-  --accent-soft: rgba(33, 27, 23, .05);   /* 極淡的灰，不是棕 */
-  --on-accent: #f2e3b7;
+  --accent: #c8975a;
+  --accent-soft: #2a2318;  /* 標籤底色 */
+  --on-accent: #14120f;
 
-  --danger: #cf5148;
-  --danger-soft: rgba(207, 81, 72, .08);
+  --danger: #d9705a;
+  --danger-soft: #2e1c17;
 
-  /* 小標籤：灰底紅字。取樣站上最有辨識度的元素就是這個配色（日期與
-     地點標籤），所以標籤獨立成一組 token，不跟 accent 共用——之後調
-     主彩不會連帶把標籤也改掉。 */
-  --tag: #cf5148;
-  --tag-soft: rgba(33, 27, 23, .05);
+  /* 預訂行事曆上那排點的顏色。一個狀態一個顏色，圖例就印在日曆上方，
+     所以這四個值改了要記得那一列講的也跟著變。 */
+  --dot-wait: #e0b341;     /* 等待主持人確認 */
+  --dot-deposit: #d9705a;  /* 等待支付訂金 */
+  --dot-booked: #6aa3d8;   /* 預約成立 */
+  --dot-ended: #6f675d;    /* 已結束 */
 
-  /* 預訂行事曆上那排點的顏色。一個狀態一個顏色，圖例就印在日曆上方。
-     ★ 這一組跟步經徑不同：白底要壓深才看得見，深色底那組在這裡會糊掉。 */
-  --dot-wait: #c8890c;     /* 等待主持人確認 */
-  --dot-deposit: #cf5148;  /* 等待支付訂金，跟 --danger 同色 */
-  /* ★ 預約成立與已結束是這家店圖例上僅有的兩個顏色（她到得了的狀態只有這兩種），
-       所以兩者要一眼分得開：粉紫偏淡、灰壓深（案主 2026-09-19 指定）。
-       粉紫對白底只有約 2:1，是案主看過對比數字之後選的，**不要當成疏失改掉**。
-       原本的灰 #9a958c 跟粉紫明暗只差 1.5 倍，兩個點看起來幾乎一樣；壓到
-       #625d56 之後差 3.25 倍。 */
-  --dot-booked: #c3aee0;   /* 預約成立：粉紫 */
-  --dot-ended: #625d56;    /* 已結束：深灰 */
-
-  /* 忙碌日那一格：底色比背景深一階，再加一圈 2px 外框。
-     ★ 這一組跟步經徑不同。步經徑是深色底，外框用白色；這家店是白底，白框
-       會完全看不見，所以外框用內文色（近黑）。底色原本是合併時從步經徑帶
-       過來的深棕 #2b2620——配上這邊的深色字，數字會整個看不見（2026-09-18
-       發現，是我先前合併時沒調到）。 */
-  --busy-bg: #efedea;
-  --busy-ring: #141413;
+  /* 忙碌日那一格：底色比背景亮一階，再加一圈外框。
+     ★ 只靠底色的話幾乎看不出來（案主 2026-09-18：「框框超不清楚」），所以
+       外框用白色、2px，一眼就看得到。 */
+  --busy-bg: #2b2620;
+  --busy-ring: #ffffff;
 
   --radius: 10px;
   --radius-sm: 6px;
   --pad: 18px;
 
-  /* 告訴瀏覽器這一頁是淺色的，讓它用淺色版本畫「原生控制項」——
+  /* 告訴瀏覽器這一頁是深色的，讓它用深色版本畫「原生控制項」——
      數字欄位的上下箭頭、日期欄位的月曆圖示與跳出來的月曆面板、
      捲軸。這些是瀏覽器自己畫的，CSS 碰不到：
      ::-webkit-inner-spin-button 之類的偽元素不吃 color，硬改只能
-     整個藏起來。
-     ★ 這一行漏掉的話症狀特別難查：白底介面上會跳出**深色的月曆面板**
-       與深色捲軸，而你翻遍 CSS 都找不到是哪一條造成的。 */
-  color-scheme: light;
+     整個藏起來。不設這一行的話它們一律照淺色模式畫，在深底上就是
+     白色方塊配深色箭頭，跟整個介面打架。 */
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -92,7 +64,7 @@ body {
 }
 
 a { color: var(--accent); }
-a:hover { color: #4a3b18; }   /* accent 壓深一階。白底上往亮走＝對比變差 */
+a:hover { color: #e0b478; }
 
 /* ── 版面 ───────────────────────────────────────────────── */
 
@@ -211,7 +183,7 @@ input[type="date"], input[type="time"], input[type="url"], textarea {
 
 select:disabled, input:disabled, textarea:disabled {
   color: var(--ink-disabled);
-  background: #f4f3f1;
+  background: #17140f;
   cursor: not-allowed;
 }
 
@@ -247,7 +219,7 @@ select option { background: var(--surface); color: var(--ink); }
 }
 
 .btn--primary { background: var(--accent); color: var(--on-accent); }
-.btn--primary:disabled { background: #e8e7e4; color: var(--ink-disabled); cursor: not-allowed; }
+.btn--primary:disabled { background: #4a4034; color: var(--ink-disabled); cursor: not-allowed; }
 
 .btn--ghost {
   background: transparent;
@@ -268,8 +240,8 @@ select option { background: var(--surface); color: var(--ink); }
   gap: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--tag);
-  background: var(--tag-soft);
+  color: var(--accent);
+  background: var(--accent-soft);
   padding: 6px 13px;
   border-radius: var(--radius-sm);
 }
@@ -313,13 +285,7 @@ select option { background: var(--surface); color: var(--ink); }
   white-space: nowrap;
 }
 
-/* 選中的頁籤用純黑，不是 accent。
-   ★ 這是這份配色裡唯一的純黑（案主指定）：頁籤是「我現在在哪」的唯一
-     指示，它必須是整頁最重的字；用 accent（棕）的話它跟旁邊的標籤、
-     連結同一個重量，掃過去分不出哪個是選中的。
-     底線維持 accent —— 顏色與粗細各自表達一件事，兩個都改成黑會讓那
-     一條線看起來像分隔線而不是指標。 */
-.tab--active { color: #000; border-bottom-color: var(--accent); }
+.tab--active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* ── 狀態訊息 ───────────────────────────────────────────── */
 
@@ -352,7 +318,7 @@ select option { background: var(--surface); color: var(--ink); }
   border-radius: var(--radius);
   padding: 13px 18px;
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   animation: toast-in 0.18s ease-out;
 }
 
@@ -368,7 +334,7 @@ select option { background: var(--surface); color: var(--ink); }
 .modal-layer {
   position: fixed;
   inset: 0;
-  background: rgba(28, 25, 23, 0.35);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -449,13 +415,13 @@ select option { background: var(--surface); color: var(--ink); }
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.linklike:hover { color: #4a3b18; }
+.linklike:hover { color: #e0b478; }
 
 .status-chip {
   font-size: 12px;
   font-weight: 500;
-  color: var(--tag);
-  background: var(--tag-soft);
+  color: var(--accent);
+  background: var(--accent-soft);
   padding: 5px 10px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -573,8 +539,8 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 最後一個單位（分）的右邊距會讓整排比上面那排短 2px，切齊時看得出來 */
 .dt-row .dt-unit:last-child { margin-right: 0; }
 
-/* 頂欄的品牌圖。26px 而不是 20px：來源圖有細節（冰淇淋＋雲），
-   再小會糊成一團。 */
+/* 頂欄的品牌圖。原本是一個 20px 的勾勾 SVG，改成圖檔之後尺寸給大一點：
+   那是四個字排成 2×2，20px 會糊成一團。 */
 .topbar__mark {
   width: 26px;
   height: 26px;
@@ -618,7 +584,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .search-hit {
@@ -680,7 +646,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.10);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 
@@ -730,7 +696,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 破壞性動作的按鈕。紅底白字——它跟旁邊那顆「編輯」的後果不是同一個
    量級，長得一樣會被順手按到。 */
 .btn--danger { background: var(--danger); color: #fff; }
-.btn--danger:disabled { background: #f4f3f1; color: var(--ink-disabled); cursor: not-allowed; }
+.btn--danger:disabled { background: #4a3330; color: var(--ink-disabled); cursor: not-allowed; }
 
 /* 時間輸入有兩組（自由輸入／店家設定的時段），同時只出現一組。
    兩組共用同一個寬度，切換時整排不會跳動。 */
@@ -772,7 +738,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(28, 25, 23, .12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
 }
 
 .cal__head {
@@ -911,9 +877,7 @@ iframe[src*="accounts.google.com"] {
   color: var(--danger);
   white-space: nowrap;
 }
-/* 「異常停權」比「停用」高一級：前者是系統自動判定的，後者是管理員手動
-   關掉的。兩個都用灰底紅字的話長得一模一樣，看不出哪個是系統停的。 */
-.status-chip--warn { color: #fff; background: var(--danger); }
+.status-chip--warn { color: var(--danger); background: var(--danger-soft); }
 
 /* ── 預訂行事曆 ─────────────────────────────────────────────── */
 
