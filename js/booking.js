@@ -702,6 +702,8 @@ export function createBookingView() {
       // 平日假日一樣就只有一個數字（見 ui.js 的 dualPrice）。
       // 沒有訂金那一格：這家店不收訂金（functions 表 deposit=off）。
       dualPrice(d.price, d.price_holiday),
+      // 額外註記，店家在劇本編輯器裡寫的一句話。空的後端回 null，就不顯示。
+      d.extra_note,
     ]) {
       if (tag) tagRow.append(el('div', { class: 'tag' }, tag));
     }
