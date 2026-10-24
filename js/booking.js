@@ -26,7 +26,7 @@
 import { api, ApiError } from './api.js';
 import { createCalendar } from './calendar.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl,
-         dualPrice } from './ui.js';
+         dualPrice, positionLabel } from './ui.js';
 import { getUser } from './auth.js';
 
 // 時與分的下拉選項。分只給整點與半點——場次時間是以半小時為單位的約定，
@@ -630,7 +630,9 @@ export function createBookingView() {
         //   前端連「有幾個角色」都不需要知道。
         request_id: state.requestId,
       });
-      toast(result.already_existed ? '這筆預約先前已經成立' : `預約成功（${result.label}）`);
+      const position = positionLabel(result);
+      toast(result.already_existed ? '這筆預約先前已經成立'
+        : position ? `預約成功（${position}）` : '預約成功');
       resetBelowScript();
       state.mmgId = '';
       state.detail = null;
