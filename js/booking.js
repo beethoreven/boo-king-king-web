@@ -23,7 +23,7 @@
 import { api, ApiError } from './api.js';
 import { createCalendar } from './calendar.js';
 import { el, clear, toast, confirmDialog, alertDialog, spinner, isHttpUrl,
-         dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
+         dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL, positionLabel } from './ui.js';
 import { getUser } from './auth.js';
 
 /** 每個角色一列。gm_user_ids 固定 4 格，沒有的角色是 null。 */
@@ -781,7 +781,9 @@ export function createBookingView() {
         gm_user_ids: state.gms,
         request_id: state.requestId,
       });
-      toast(result.already_existed ? '這筆預約先前已經成立' : `預約成功（${result.label}）`);
+      const position = positionLabel(result);
+      toast(result.already_existed ? '這筆預約先前已經成立'
+        : position ? `預約成功（${position}）` : '預約成功');
       resetBelowScript();
       state.mmgId = '';
       state.detail = null;
