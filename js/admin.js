@@ -101,7 +101,7 @@ const emptyMmg = () => ({
   id: null, name: '', url: '', period: null,
   price: null, price_holiday: null, booking_cost: null, booking_cost_holiday: null,
   ready_time_cost: 0.5, reset_time_cost: 0.5,
-  players: '', waitlist_limit: 3, status: 'active', room_id: 1,
+  players: '', extra_note: '', waitlist_limit: 3, status: 'active', room_id: 1,
   // 新劇本預設此刻上架。上架是一個明確的時刻，不只是日期。
   start_booking: nowISO(), end_booking: null,
   schedule: { weekly: [], exceptions: [] },
@@ -502,6 +502,12 @@ export function createAdminView({ tab, sub } = {}) {
         field({ label: '時長（小時）', control: el('input', { type: 'number', step: '0.1', value: m.period ?? '', onInput: setNum('period') }) }),
         field({ label: '人數（顯示用）', control: el('input', { type: 'text', value: m.players ?? '', onInput: setField('players') }) }),
       ]),
+      field({
+        label: '額外註記',
+        // maxlength 跟後端的 EXTRA_NOTE_MAX 一致：這裡擋住打字，後端擋住手打 API。
+        control: el('input', { type: 'text', maxlength: '30', value: m.extra_note ?? '', placeholder: '例如：需自備服裝（留空＝不顯示）', onInput: setField('extra_note') }),
+        hint: '會跟時長、人數、售價一起顯示成小標籤。最多 30 字',
+      }),
       el('div', { class: 'row' }, [
         field({ label: '佈置時間（小時）',
           control: el('input', { type: 'number', step: '0.1', min: '0', value: m.ready_time_cost ?? 0.5, onInput: setNum('ready_time_cost') }) }),
