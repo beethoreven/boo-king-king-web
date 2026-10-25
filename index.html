@@ -22,7 +22,9 @@
     //   branch 上完全相同：那些檔案會一直因為通用修改而改動，只要裡面
     //   還留著店名，每次把 main 合進 eli 就會撞一次沒有意義的衝突。
     window.__BOO_KING_KING_SITE_NAME__ = '步經徑';
-    window.__BOO_KING_KING_API_HOST__ = 'https://boo-king-king-tutor-arthur.onrender.com';
+    // 共用的後端：一個服務服務好幾家店，靠下面的部署識別（/v/<店家>）分開
+    // 每家店的資料庫。demo（main 分支）是自己獨立的服務。
+    window.__BOO_KING_KING_API_HOST__ = 'https://boo-king-king-api.onrender.com';
     window.__BOO_KING_KING_VARIANT__ = 'tutor-arthur';
     window.__GOOGLE_CLIENT_ID__ = '903554149397-i8l9mfpn86m3352i49472rn6fj39f0kg.apps.googleusercontent.com';
   </script>
