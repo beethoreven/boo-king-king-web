@@ -74,7 +74,7 @@ export function createRegisterView(email, onDone) {
         el('div', {}, NOTICE),
         // 條款是獨立的一頁，跟這套介面無關，所以開新分頁而不是切換畫面——
         // 填到一半的表單不該因為想看條款就被丟掉。
-        el('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, '使用者條款'),
+        el('a', { href: '/terms.html', target: '_blank', rel: 'noopener' }, '使用者條款'),
         el('span', {}, '。'),
       ]),
     ]),
