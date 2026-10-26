@@ -1002,9 +1002,12 @@ iframe[src*="accounts.google.com"] {
    ★ 簡介頁的主色（按鈕、區塊框、區塊標題）自成一組 token，不直接用 --accent：
      步經徑就是 --accent 的黃，eli 的 --accent 是深棕，簡介頁要用粉紫（案主
      2026-10-26）。店家分支只改下面這兩個值，不要去改用到它們的規則。 */
+/* eli：簡介頁用粉紫（案主 2026-10-26），跟行事曆「預約成立」的點同一個色。
+   按鈕上的字用近黑：粉紫是淺色，淺米字放上去看不見。
+   ★ 區塊標題是粉紫字放在白底上，對比只有約 2:1，偏淡。 */
 .intro-page {
-  --intro-accent: var(--accent);
-  --on-intro-accent: var(--on-accent);
+  --intro-accent: var(--dot-booked);
+  --on-intro-accent: var(--ink);
 }
 /* :not(:disabled)：停用的按鈕照樣用全站的灰，灰的才是不能按。 */
 .intro-page .btn--primary:not(:disabled) { background: var(--intro-accent); color: var(--on-intro-accent); }
