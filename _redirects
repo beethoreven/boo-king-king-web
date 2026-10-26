@@ -1,6 +1,11 @@
 # Cloudflare 靜態站的轉址規則（見 https://developers.cloudflare.com/workers/static-assets/redirects/）。
 #
 # 劇本簡介頁 /mmg/<id> 沒有對應的檔案，交給首頁畫（main.js 看網址決定畫簡介頁）。
-# 200 = 網址不變、內容是 index.html。只有 /mmg/ 底下這樣做，其他打錯的網址
+# 200 = 網址不變、內容是首頁。只有 /mmg/ 底下這樣做，其他打錯的網址
 # 照樣回 404（理由見 wrangler.jsonc 的 not_found_handling）。
-/mmg/* /index.html 200
+#
+# ★ 目標要寫 /，不能寫 /index.html：Cloudflare 會自動把 .html 與 /index 拿掉，
+#   它把「導到 /index.html」判定成無限循環，整個部署直接失敗
+#   （2026-10-26 實際發生，錯誤代碼 100324）。本機的 wrangler --dry-run 測不出來，
+#   這一項檢查只在 Cloudflare 伺服器端做。
+/mmg/* / 200
