@@ -254,8 +254,9 @@ function renderEditor(app, initial) {
   const preview = el('div', { class: 'intro-edit__preview' });
   const tagList = el('div', { class: 'tag-row' });
   const tagInput = el('input', {
+    // ★ 不接 Enter：注音、倉頡選字時按的 Enter 也會觸發，字還沒選完就被加進去了
+    //   （案主 2026-10-26）。一律按「加入」。
     type: 'text', maxlength: String(TAG_MAX_CHARS), placeholder: '例如：懸疑',
-    onKeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } },
   });
   const coverHolder = el('div', { class: 'intro-edit__cover' });
   const charList = el('div', { class: 'intro-edit__chars' });
