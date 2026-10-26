@@ -5,7 +5,7 @@
  * main.js 看到這個網址就交給這裡畫，不走登入流程。
  *
  * 內容（後端 db/intro.py 決定回什麼，這裡只照著畫，沒有值就不畫）：
- *   店家編輯的   封面圖、類型標籤、劇本簡介、角色簡介
+ *   店家編輯的   封面圖、類型標籤、劇本簡介、角色簡介、老闆的話
  *   自動帶入的   時長、人數、售價、訂金、額外註記
  *
  * ## 編輯模式：/mmg/<id>?edit=1
@@ -29,6 +29,7 @@ const SITE_NAME = window.__BOO_KING_KING_SITE_NAME__;
 // 跟後端 db/intro.py 的上限一致：這裡擋住打字，後端擋住手打 API。
 const SYNOPSIS_MAX = 3000;
 const CHARACTERS_MAX = 5000;
+const OWNER_NOTE_MAX = 3000;
 const TAGS_MAX = 8;
 const TAG_MAX_CHARS = 12;
 
@@ -83,7 +84,7 @@ function renderMissing(app, err, { isAdmin, mmgId }) {
     : status === 503 ? '今天的瀏覽人數太多，請明天再試'
     : '讀取失敗，請稍後再試';
   const actions = isAdmin
-    ? [el('a', { class: 'btn btn--ghost btn--small', href: `/mmg/${mmgId}?edit=1` }, '編輯簡介頁')]
+    ? [el('a', { class: 'btn btn--primary btn--small', href: `/mmg/${mmgId}?edit=1` }, '編輯簡介頁')]
     : [];
   app.append(topbar(actions), el('div', { class: 'empty' }, message));
   // 管理員看到 404 多半是「這齣還沒上架」：簡介頁只公開上架中的劇本。
@@ -126,13 +127,14 @@ function introBody(d, coverSrc) {
     info.length ? el('div', { class: 'tag-row' }, info.map((t) => el('span', { class: 'tag' }, t))) : null,
     textBlock('劇本簡介', d.synopsis),
     textBlock('角色簡介', d.characters),
+    textBlock('老闆的話', d.owner_note),
   ]);
 }
 
 function renderPage(app, d, { isAdmin }) {
   clear(app);
   const actions = isAdmin
-    ? [el('a', { class: 'btn btn--ghost btn--small', href: `/mmg/${d.id}?edit=1` }, '編輯簡介頁')]
+    ? [el('a', { class: 'btn btn--primary btn--small', href: `/mmg/${d.id}?edit=1` }, '編輯簡介頁')]
     : [];
   app.append(topbar(actions), introBody(d, d.cover_path ? apiUrl(d.cover_path) : null));
   document.title = d.name ? `${d.name} — ${SITE_NAME}` : SITE_NAME;
@@ -145,12 +147,16 @@ function renderEditor(app, initial) {
   const draft = {
     synopsis: initial.synopsis ?? '',
     characters: initial.characters ?? '',
+    owner_note: initial.owner_note ?? '',
     tags: [...(initial.tags || [])],
   };
   let data = initial;          // 後端最後一次給的完整資料（封面、價錢那些）
   let coverSrc = null;         // 封面的預覽網址（blob:）
   let coverGen = 0;            // 封面載入的世代（見 loadCover）
   let saving = false;
+  // 最後一次存進去的內容。草稿跟它一樣就是「沒改過」，儲存鈕停用（跟劇本管理一致：
+  // 灰的才是不能按，能按的一律是主色）。
+  let saved = JSON.stringify(draft);
 
   const preview = el('div', { class: 'intro-edit__preview' });
   const tagList = el('div', { class: 'tag-row' });
@@ -159,8 +165,15 @@ function renderEditor(app, initial) {
     onKeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } },
   });
   const coverHolder = el('div', { class: 'intro-edit__cover' });
+  const saveBtn = el('button', { class: 'btn btn--primary', type: 'button', onClick: save }, '儲存');
+  const removeBtn = el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: removeCover }, '移除圖片');
+
+  function refreshSave() {
+    saveBtn.disabled = saving || JSON.stringify(draft) === saved;
+  }
 
   function refreshPreview() {
+    refreshSave();
     clear(preview);
     preview.append(introBody({ ...data, ...draft }, coverSrc));
   }
@@ -211,6 +224,7 @@ function renderEditor(app, initial) {
     }
     if (coverSrc) URL.revokeObjectURL(coverSrc);
     coverSrc = src;
+    removeBtn.disabled = !data.cover_path;
     clear(coverHolder);
     coverHolder.append(
       coverSrc ? el('img', { class: 'intro__cover intro__cover--thumb', src: coverSrc, alt: '' })
@@ -249,14 +263,17 @@ function renderEditor(app, initial) {
   async function save() {
     if (saving) return;
     saving = true;
+    refreshSave();
+    const sent = JSON.stringify(draft);
     try {
       data = await api.put(`/api/admin/mmg/${data.id}/intro`, draft);
+      saved = sent;
       toast('已儲存');
-      refreshPreview();
     } catch (err) {
       toast(err.message || '儲存失敗', { error: true });
     } finally {
       saving = false;
+      refreshPreview();
     }
   }
 
@@ -268,8 +285,8 @@ function renderEditor(app, initial) {
   clear(app);
   app.append(
     topbar([
-      el('a', { class: 'btn btn--ghost btn--small', href: `/mmg/${data.id}` }, '看公開頁面'),
-      el('a', { class: 'btn btn--ghost btn--small', href: '/?view=admin&tab=mmg' }, '回劇本管理'),
+      el('a', { class: 'btn btn--primary btn--small', href: `/mmg/${data.id}` }, '看公開頁面'),
+      el('a', { class: 'btn btn--primary btn--small', href: '/?view=admin&tab=mmg' }, '回劇本管理'),
     ]),
     el('div', { class: 'section' }, [
       el('div', { class: 'section__label' }, `編輯簡介頁：${data.name}`),
@@ -281,8 +298,8 @@ function renderEditor(app, initial) {
         el('label', { class: 'field__label' }, '封面圖'),
         coverHolder,
         el('div', { class: 'row' }, [
-          el('button', { class: 'btn btn--small', type: 'button', onClick: () => fileInput.click() }, '上傳圖片'),
-          el('button', { class: 'btn btn--ghost btn--small', type: 'button', onClick: removeCover }, '移除圖片'),
+          el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => fileInput.click() }, '上傳圖片'),
+          removeBtn,
         ]),
         el('div', { class: 'field__hint' }, 'JPG、PNG、WebP、GIF，5 MB 以內。會照原比例縮到最寬 1200、最高 1600，並清掉照片的拍攝位置等資訊'),
         fileInput,
@@ -293,20 +310,24 @@ function renderEditor(app, initial) {
         tagList,
         el('div', { class: 'row' }, [
           tagInput,
-          el('button', { class: 'btn btn--small', type: 'button', onClick: addTag }, '加入'),
+          el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: addTag }, '加入'),
         ]),
       ]),
 
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label' }, `劇本簡介（${SYNOPSIS_MAX} 字以內）`),
-        textarea('synopsis', SYNOPSIS_MAX, '這齣戲在講什麼'),
+        textarea('synopsis', SYNOPSIS_MAX, '這個劇本是什麼樣的故事'),
       ]),
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label' }, `角色簡介（${CHARACTERS_MAX} 字以內）`),
         textarea('characters', CHARACTERS_MAX, '每個角色一段'),
       ]),
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label' }, `老闆的話（${OWNER_NOTE_MAX} 字以內）`),
+        textarea('owner_note', OWNER_NOTE_MAX, '想對玩家說的話'),
+      ]),
 
-      el('button', { class: 'btn', type: 'button', onClick: save }, '儲存'),
+      saveBtn,
       el('div', { class: 'field__hint' },
         '時長、人數、售價、訂金、額外註記會自動從劇本管理帶進來，在那邊改。沒有填的就不會顯示。'),
 

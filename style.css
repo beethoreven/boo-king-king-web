@@ -1013,7 +1013,13 @@ iframe[src*="accounts.google.com"] {
   align-self: center;
 }
 .intro__cover--thumb { max-height: 200px; align-self: flex-start; }
-.intro__block { display: flex; flex-direction: column; gap: 6px; }
+/* 劇本簡介、角色簡介、老闆的話各一個主色框：內容都是一長段文字，沒框的話
+   一段接一段，看不出哪裡換了主題（案主 2026-10-26）。 */
+.intro__block {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--accent); border-radius: var(--radius); padding: 14px 16px;
+}
+.intro__block .section__label { color: var(--accent); }
 /* 簡介是純文字：保留店家打的換行，長網址之類的不換行字串也要能斷行。 */
 .intro__text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; color: var(--ink-soft); }
 /* 類型標籤跟時長、售價那一排分開：同樣的形狀、換一個顏色，一眼看得出是兩回事。 */
