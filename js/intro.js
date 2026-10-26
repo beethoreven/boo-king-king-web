@@ -34,6 +34,10 @@ const CHARACTER_DESCRIPTION_MAX = 1000;
 const OWNER_NOTE_MAX = 3000;
 const TAGS_MAX = 8;
 const TAG_MAX_CHARS = 12;
+// 後端收的檔案大小上限（admin_utils/cover_image.MAX_UPLOAD_BYTES）與縮圖的框。
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const COVER_BOX = [1200, 1600];
+const CHARACTER_BOX = [800, 1200];
 
 export async function startIntroPage(app, rawId) {
   // ★ 這一頁不需要登入。登入憑證過期（401）時，主站的做法是跳回登入畫面，
@@ -66,6 +70,37 @@ export async function startIntroPage(app, rawId) {
   } catch (err) {
     renderMissing(app, err, { isAdmin, mmgId });
   }
+}
+
+/**
+ * 超過後端上限的照片，先在瀏覽器縮到後端本來就會縮到的大小再送。
+ *
+ * 後端反正會壓縮，但它得先把整個檔案收進記憶體才壓得了——Render 那台只有
+ * 512MB，所以後端的上限不能拿掉。手機原圖常常超過 5MB，在這裡先縮，店家就
+ * 不會碰到「圖片太大」。沒超過的照原檔送：畫布會丟掉照片的色彩描述檔，
+ * 廣色域的照片顏色會變淡一點，能不經過畫布就不經過。
+ */
+async function fitForUpload(file, [maxW, maxH]) {
+  if (file.size <= UPLOAD_MAX_BYTES) return file;
+  let bitmap;
+  try {
+    // from-image：照 EXIF 的方向轉正（手機直拍的照片常常存成橫的）。
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    return file;   // 瀏覽器讀不出來：照原檔送，讓後端說清楚是什麼問題
+  }
+  const scale = Math.min(1, maxW / bitmap.width, maxH / bitmap.height);
+  const canvas = el('canvas', {
+    width: String(Math.round(bitmap.width * scale)), height: String(Math.round(bitmap.height * scale)),
+  });
+  const ctx = canvas.getContext('2d');
+  // JPEG 沒有透明：透明的部分墊白底，不然會變成黑的。
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
 }
 
 function topbar(actions = []) {
@@ -212,6 +247,9 @@ function renderEditor(app, initial) {
   // 新的 key，所以舊的不會被誤用；載入中的記成 'loading'，免得重複抓。
   const adminImages = new Map();
   let fileSerial = 0;          // 每選一次圖加一，snapshot 用它分辨「選了另一張圖」
+  // 正在瀏覽器裡縮小的角色圖。大張的照片要縮一兩秒，這段期間不能存——不然存進去
+  // 的是還沒換上的舊圖，畫面上卻看不出來。
+  const shrinking = new Set();
 
   /** 角色條目：id 是 null 代表還沒存過；file 是選了還沒上傳的圖。 */
   function fromServer(list) {
@@ -276,7 +314,7 @@ function renderEditor(app, initial) {
   let form = null;             // 編輯區（下面 app.append 時才建出來）
 
   function refreshSave() {
-    saveBtn.disabled = saving || snapshot() === saved;
+    saveBtn.disabled = saving || shrinking.size > 0 || snapshot() === saved;
     // ★ 存檔中整個編輯區不能動：存完會用後端回來的資料重建角色清單（新角色才有 id），
     //   存檔途中打的字會被那一次重建蓋掉，而且不會有任何提示（known-issue 第 2 條）。
     if (form) form.inert = saving;
@@ -307,11 +345,17 @@ function renderEditor(app, initial) {
     const src = characterSrc(c);
     const file = el('input', {
       type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true,
-      onChange: () => {
-        const f = file.files?.[0];
+      onChange: async () => {
+        const picked = file.files?.[0];
         file.value = '';
-        if (!f) return;
-        if (f.size > 5 * 1024 * 1024) { toast('圖片太大（上限 5 MB）', { error: true }); return; }
+        if (!picked) return;
+        shrinking.add(c);
+        renderCharacters();
+        refreshSave();
+        const f = await fitForUpload(picked, CHARACTER_BOX);
+        shrinking.delete(c);
+        // 縮圖期間這個角色可能已經被刪掉了。
+        if (!draft.characters.includes(c)) { refreshSave(); return; }
         if (c.fileUrl) URL.revokeObjectURL(c.fileUrl);
         c.file = f;
         c.fileUrl = URL.createObjectURL(f);
@@ -358,7 +402,8 @@ function renderEditor(app, initial) {
       }, c.description),
       el('div', { class: 'intro-edit__char-image' }, [
         src ? el('img', { class: 'intro-edit__char-thumb', src, alt: '' })
-          : el('div', { class: 'field__hint' }, hasImage(c) ? '圖片載入中…' : '沒有圖片'),
+          : el('div', { class: 'field__hint' },
+            shrinking.has(c) ? '圖片處理中…' : hasImage(c) ? '圖片載入中…' : '沒有圖片'),
         el('div', { class: 'row' }, [
           el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => file.click() },
             hasImage(c) ? '換圖片' : '上傳圖片'),
@@ -428,11 +473,11 @@ function renderEditor(app, initial) {
   const fileInput = el('input', {
     type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true,
     onChange: async () => {
-      const file = fileInput.files?.[0];
+      const picked = fileInput.files?.[0];
       fileInput.value = '';
-      if (!file) return;
-      if (file.size > 5 * 1024 * 1024) { toast('圖片太大（上限 5 MB）', { error: true }); return; }
+      if (!picked) return;
       try {
+        const file = await fitForUpload(picked, COVER_BOX);
         data = await api.upload(`/api/admin/mmg/${data.id}/cover`, file);
         toast('封面已更新');
         await loadCover();
@@ -521,7 +566,7 @@ function renderEditor(app, initial) {
           el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => fileInput.click() }, '上傳圖片'),
           removeBtn,
         ]),
-        el('div', { class: 'field__hint' }, 'JPG、PNG、WebP、GIF，5 MB 以內。會照原比例縮到最寬 1200、最高 1600，並清掉照片的拍攝位置等資訊'),
+        el('div', { class: 'field__hint' }, 'JPG、PNG、WebP、GIF。會照原比例縮到最寬 1200、最高 1600，並清掉照片的拍攝位置等資訊'),
         fileInput,
       ]),
 
