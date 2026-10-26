@@ -37,6 +37,8 @@ export async function startIntroPage(app, rawId) {
   // ★ 這一頁不需要登入。登入憑證過期（401）時，主站的做法是跳回登入畫面，
   //   在這裡會把一個公開頁面整個換成登入畫面——所以這一頁不做任何事。
   setUnauthorizedHandler(() => {});
+  // 簡介頁自己的主色（style.css 的 .intro-page）。整頁重新載入才會離開這一頁，不用拿掉。
+  app.classList.add('intro-page');
 
   clear(app);
   app.append(el('div', { class: 'loading' }, '載入中…'));
