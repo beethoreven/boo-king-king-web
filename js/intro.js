@@ -79,6 +79,8 @@ function renderMissing(app, err, { isAdmin, mmgId }) {
   const status = err instanceof ApiError ? err.status : 0;
   const message = status === 404 ? '找不到這個劇本'
     : status === 429 ? '請求過於頻繁，請稍候再試'
+    // 每家店每天的讀取上限用完了（後端 intro_public 第 5 點），隔天就恢復。
+    : status === 503 ? '今天的瀏覽人數太多，請明天再試'
     : '讀取失敗，請稍後再試';
   const actions = isAdmin
     ? [el('a', { class: 'btn btn--ghost btn--small', href: `/mmg/${mmgId}?edit=1` }, '編輯簡介頁')]
