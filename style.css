@@ -1034,7 +1034,9 @@ iframe[src*="accounts.google.com"] {
 }
 .intro__block .section__label { color: var(--intro-accent); }
 /* 簡介是純文字：保留店家打的換行，長網址之類的不換行字串也要能斷行。 */
-.intro__text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; color: var(--ink-soft); }
+/* 主文字色（步經徑是白、eli 是近黑），不用次要的灰：簡介頁的主角就是這幾段字
+   （案主 2026-10-26）。 */
+.intro__text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; color: var(--ink); }
 /* 類型標籤跟時長、售價那一排分開：同樣的形狀、換一個顏色，一眼看得出是兩回事。 */
 .tag--genre { color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); }
 .tag__remove {
@@ -1073,6 +1075,9 @@ iframe[src*="accounts.google.com"] {
 .intro-edit__char-actions { display: flex; gap: 6px; }
 .intro-edit__char-image { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .intro-edit__char-image .row { align-self: stretch; }
+/* 圖片上傳中：轉圈＋字排成一行，佔的高度跟縮圖差不多，傳完換成圖時版面不跳太多。 */
+.intro-edit__busy { flex-direction: row; gap: 8px; padding: 12px 0; color: var(--ink-soft); font-size: 14px; }
+.intro-page .intro-edit__busy .spinner { border-top-color: var(--intro-accent); }
 .intro-edit__char-thumb { width: 96px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius); }
 /* 編輯模式下面的預覽，用一條線跟編輯區分開。 */
 .intro-edit__preview { border-top: 1px dashed var(--border); margin-top: 8px; }

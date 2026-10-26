@@ -239,44 +239,38 @@ function renderEditor(app, initial) {
   let data = initial;          // 後端最後一次給的完整資料（封面、價錢那些）
   let coverSrc = null;         // 封面的預覽網址（blob:）
   let coverGen = 0;            // 封面載入的世代（見 loadCover）
+  let coverBusy = false;       // 封面上傳／移除中
   let saving = false;
+  // ★ 圖片（封面、角色圖）選了就直接存，不用按儲存（案主 2026-10-26）；儲存鈕只管
+  //   文字、標籤、角色清單。所以 snapshot 不含圖片。
+  //
   // 最後一次存進去的內容。草稿跟它一樣就是「沒改過」，儲存鈕停用（跟劇本管理一致：
   // 灰的才是不能按，能按的一律是主色）。
   let saved = snapshot();
   // 管理員那一支拿到的角色圖（blob: 網址），key 是圖片路徑。路徑帶版本號，換圖就是
   // 新的 key，所以舊的不會被誤用；載入中的記成 'loading'，免得重複抓。
   const adminImages = new Map();
-  let fileSerial = 0;          // 每選一次圖加一，snapshot 用它分辨「選了另一張圖」
-  // 正在瀏覽器裡縮小的角色圖。大張的照片要縮一兩秒，這段期間不能存——不然存進去
-  // 的是還沒換上的舊圖，畫面上卻看不出來。
-  const shrinking = new Set();
+  // 圖片正在縮小、上傳或移除的角色。這段期間不能存文字：存檔會用後端回來的資料
+  // 重建角色清單，跟上傳的結果互相蓋掉。
+  const busy = new Set();
 
-  /** 角色條目：id 是 null 代表還沒存過；file 是選了還沒上傳的圖。 */
+  /** 角色條目：id 是 null 代表還沒存過。 */
   function fromServer(list) {
     return (Array.isArray(list) ? list : []).map((c) => ({
-      id: c.id, name: c.name ?? '', description: c.description ?? '',
-      imagePath: c.image_path, file: null, fileUrl: null, fileSerial: 0, removeImage: false,
+      id: c.id, name: c.name ?? '', description: c.description ?? '', imagePath: c.image_path,
     }));
   }
 
   function snapshot() {
     return JSON.stringify({
       ...draft,
-      characters: draft.characters.map((c) => ({
-        id: c.id, name: c.name, description: c.description,
-        image: c.file ? `file:${c.fileSerial}` : (c.removeImage ? null : c.imagePath),
-      })),
+      characters: draft.characters.map((c) => ({ id: c.id, name: c.name, description: c.description })),
     });
   }
 
-  function hasImage(c) {
-    return Boolean(c.file) || (Boolean(c.imagePath) && !c.removeImage);
-  }
-
-  /** 預覽與縮圖用的圖片網址。已存的圖第一次用到時才去抓，抓到再重畫。 */
+  /** 已經存進去的角色圖網址。第一次用到時才去抓，抓到再重畫。 */
   function characterSrc(c) {
-    if (c.file) return c.fileUrl;
-    if (!c.imagePath || c.removeImage) return null;
+    if (!c.imagePath) return null;
     const hit = adminImages.get(c.imagePath);
     if (hit === undefined) {
       adminImages.set(c.imagePath, 'loading');
@@ -301,20 +295,22 @@ function renderEditor(app, initial) {
   const addCharBtn = el('button', {
     class: 'btn btn--primary btn--small', type: 'button',
     onClick: () => {
-      draft.characters.push({ id: null, name: '', description: '', imagePath: null,
-        file: null, fileUrl: null, fileSerial: 0, removeImage: false });
+      draft.characters.push({ id: null, name: '', description: '', imagePath: null });
       renderCharacters();
       refreshPreview();
       charList.lastElementChild?.querySelector('input')?.focus();
     },
   }, '新增角色');
   const saveBtn = el('button', { class: 'btn btn--primary', type: 'button', onClick: save }, '儲存');
+  const coverUploadBtn = el('button', {
+    class: 'btn btn--primary btn--small', type: 'button', onClick: () => fileInput.click(),
+  }, '上傳圖片');
   const removeBtn = el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: removeCover }, '移除圖片');
 
   let form = null;             // 編輯區（下面 app.append 時才建出來）
 
   function refreshSave() {
-    saveBtn.disabled = saving || shrinking.size > 0 || snapshot() === saved;
+    saveBtn.disabled = saving || busy.size > 0 || snapshot() === saved;
     // ★ 存檔中整個編輯區不能動：存完會用後端回來的資料重建角色清單（新角色才有 id），
     //   存檔途中打的字會被那一次重建蓋掉，而且不會有任何提示（known-issue 第 2 條）。
     if (form) form.inert = saving;
@@ -341,38 +337,77 @@ function renderEditor(app, initial) {
     refreshPreview();
   }
 
-  function characterCard(c, i) {
-    const src = characterSrc(c);
-    const file = el('input', {
-      type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true,
-      onChange: async () => {
-        const picked = file.files?.[0];
-        file.value = '';
-        if (!picked) return;
-        shrinking.add(c);
-        renderCharacters();
-        refreshSave();
-        const f = await fitForUpload(picked, CHARACTER_BOX);
-        shrinking.delete(c);
-        // 縮圖期間這個角色可能已經被刪掉了。
-        if (!draft.characters.includes(c)) { refreshSave(); return; }
-        if (c.fileUrl) URL.revokeObjectURL(c.fileUrl);
-        c.file = f;
-        c.fileUrl = URL.createObjectURL(f);
-        c.fileSerial = ++fileSerial;
-        c.removeImage = false;
-        renderCharacters();
-        refreshPreview();
-      },
-    });
-    const removeImage = () => {
-      if (c.fileUrl) URL.revokeObjectURL(c.fileUrl);
-      c.file = null;
-      c.fileUrl = null;
-      c.removeImage = true;
+  /**
+   * 選了圖就直接存。還沒存過的角色先單獨建出來（要有 id 才能放圖），所以名稱
+   * 一定要先填——沒有名稱就不能有圖片。
+   */
+  async function uploadCharacterImage(c, picked) {
+    if (!c.name.trim()) {
+      toast(`先填第 ${draft.characters.indexOf(c) + 1} 個角色的名稱，再放圖片`, { error: true });
+      return;
+    }
+    busy.add(c);
+    renderCharacters();
+    refreshSave();
+    try {
+      const file = await fitForUpload(picked, CHARACTER_BOX);
+      if (!draft.characters.includes(c)) return;     // 縮圖期間這個角色被刪掉了
+      if (c.id == null) {
+        const r = await api.post(`/api/admin/mmg/${data.id}/characters`, {
+          name: c.name, description: c.description, position: draft.characters.indexOf(c) + 1,
+        });
+        const sc = r.intro.characters.find((x) => x.id === r.id);
+        c.id = sc.id;
+        c.name = sc.name;
+        c.description = sc.description ?? '';
+        // 這個角色已經存進去了（排在最後面）：「最後一次存進去的內容」也要加上它，
+        // 否則儲存鈕會一直以為這個角色還沒存。
+        const s = JSON.parse(saved);
+        s.characters.push({ id: c.id, name: c.name, description: c.description });
+        saved = JSON.stringify(s);
+      }
+      data = await api.upload(`/api/admin/mmg/${data.id}/characters/${c.id}/image`, file);
+      c.imagePath = data.characters.find((x) => x.id === c.id)?.image_path ?? null;
+      // 剛傳上去的就是這張，不用再跟後端要一次。
+      if (c.imagePath) adminImages.set(c.imagePath, URL.createObjectURL(file));
+      toast('圖片已儲存');
+    } catch (err) {
+      toast(err.message || '上傳失敗', { error: true });
+    } finally {
+      busy.delete(c);
       renderCharacters();
       refreshPreview();
-    };
+    }
+  }
+
+  async function removeCharacterImage(c) {
+    busy.add(c);
+    renderCharacters();
+    refreshSave();
+    try {
+      data = await api.del(`/api/admin/mmg/${data.id}/characters/${c.id}/image`);
+      c.imagePath = null;
+      toast('圖片已移除');
+    } catch (err) {
+      toast(err.message || '移除失敗', { error: true });
+    } finally {
+      busy.delete(c);
+      renderCharacters();
+      refreshPreview();
+    }
+  }
+
+  function characterCard(c, i) {
+    const src = characterSrc(c);
+    const working = busy.has(c);
+    const file = el('input', {
+      type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true,
+      onChange: () => {
+        const picked = file.files?.[0];
+        file.value = '';
+        if (picked) uploadCharacterImage(c, picked);
+      },
+    });
     const last = draft.characters.length - 1;
     return el('div', { class: 'card card--flat intro-edit__char' }, [
       el('div', { class: 'intro-edit__char-head' }, [
@@ -382,8 +417,7 @@ function renderEditor(app, initial) {
             'aria-label': '往上移', onClick: () => move(i, -1) }, '↑'),
           el('button', { class: 'btn btn--primary btn--small', type: 'button', disabled: i === last,
             'aria-label': '往下移', onClick: () => move(i, 1) }, '↓'),
-          el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => {
-            if (c.fileUrl) URL.revokeObjectURL(c.fileUrl);
+          el('button', { class: 'btn btn--primary btn--small', type: 'button', disabled: working, onClick: () => {
             draft.characters.splice(i, 1);
             renderCharacters();
             refreshPreview();
@@ -401,14 +435,16 @@ function renderEditor(app, initial) {
         onInput: (e) => { c.description = e.target.value; refreshPreview(); },
       }, c.description),
       el('div', { class: 'intro-edit__char-image' }, [
-        src ? el('img', { class: 'intro-edit__char-thumb', src, alt: '' })
-          : el('div', { class: 'field__hint' },
-            shrinking.has(c) ? '圖片處理中…' : hasImage(c) ? '圖片載入中…' : '沒有圖片'),
+        working ? el('div', { class: 'loading intro-edit__busy' }, [
+          el('div', { class: 'spinner', 'aria-hidden': 'true' }), '圖片上傳中…',
+        ])
+          : src ? el('img', { class: 'intro-edit__char-thumb', src, alt: '' })
+            : el('div', { class: 'field__hint' }, c.imagePath ? '圖片載入中…' : '沒有圖片'),
         el('div', { class: 'row' }, [
-          el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => file.click() },
-            hasImage(c) ? '換圖片' : '上傳圖片'),
-          el('button', { class: 'btn btn--primary btn--small', type: 'button', disabled: !hasImage(c),
-            onClick: removeImage }, '移除圖片'),
+          el('button', { class: 'btn btn--primary btn--small', type: 'button', disabled: working,
+            onClick: () => file.click() }, c.imagePath ? '換圖片' : '上傳圖片'),
+          el('button', { class: 'btn btn--primary btn--small', type: 'button',
+            disabled: working || !c.imagePath, onClick: () => removeCharacterImage(c) }, '移除圖片'),
         ]),
       ]),
       file,
@@ -441,6 +477,20 @@ function renderEditor(app, initial) {
     refreshPreview();
   }
 
+  /** 封面那一塊：上傳中顯示轉圈，否則顯示圖或「還沒有」。 */
+  function renderCover() {
+    coverUploadBtn.disabled = coverBusy;
+    removeBtn.disabled = coverBusy || !data.cover_path;
+    clear(coverHolder);
+    coverHolder.append(
+      coverBusy ? el('div', { class: 'loading intro-edit__busy' }, [
+        el('div', { class: 'spinner', 'aria-hidden': 'true' }), '圖片上傳中…',
+      ])
+        : coverSrc ? el('img', { class: 'intro__cover intro__cover--thumb', src: coverSrc, alt: '' })
+          : el('div', { class: 'field__hint' }, '還沒有封面圖'),
+    );
+  }
+
   async function loadCover() {
     // ★ 世代檢查（known-issue 第 2、26 條）：連續換兩次圖，第一次的圖可能比
     //   第二次晚載完，沒擋的話預覽會停在舊的那張。
@@ -461,47 +511,47 @@ function renderEditor(app, initial) {
     }
     if (coverSrc) URL.revokeObjectURL(coverSrc);
     coverSrc = src;
-    removeBtn.disabled = !data.cover_path;
-    clear(coverHolder);
-    coverHolder.append(
-      coverSrc ? el('img', { class: 'intro__cover intro__cover--thumb', src: coverSrc, alt: '' })
-        : el('div', { class: 'field__hint' }, '還沒有封面圖'),
-    );
+    renderCover();
     refreshPreview();
+  }
+
+  /** 封面的上傳與移除：做的期間顯示轉圈，做完才算存進去。 */
+  async function coverAction(run, done) {
+    coverBusy = true;
+    renderCover();
+    try {
+      data = await run();
+      toast(done);
+    } catch (err) {
+      toast(err.message || '失敗了，請再試一次', { error: true });
+    } finally {
+      coverBusy = false;
+    }
+    await loadCover();
   }
 
   const fileInput = el('input', {
     type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true,
-    onChange: async () => {
+    onChange: () => {
       const picked = fileInput.files?.[0];
       fileInput.value = '';
       if (!picked) return;
-      try {
+      coverAction(async () => {
         const file = await fitForUpload(picked, COVER_BOX);
-        data = await api.upload(`/api/admin/mmg/${data.id}/cover`, file);
-        toast('封面已更新');
-        await loadCover();
-      } catch (err) {
-        toast(err.message || '上傳失敗', { error: true });
-      }
+        return api.upload(`/api/admin/mmg/${data.id}/cover`, file);
+      }, '封面已儲存');
     },
   });
 
-  async function removeCover() {
-    try {
-      data = await api.del(`/api/admin/mmg/${data.id}/cover`);
-      toast('封面已移除');
-      await loadCover();
-    } catch (err) {
-      toast(err.message || '移除失敗', { error: true });
-    }
+  function removeCover() {
+    coverAction(() => api.del(`/api/admin/mmg/${data.id}/cover`), '封面已移除');
   }
 
   async function save() {
     if (saving) return;
     // 整個空白的條目（沒名稱、沒介紹、沒圖）直接丟掉；其餘的一定要有名稱——
     // 沒有名稱就不能有介紹或圖片（後端也擋，這裡先講清楚是第幾個）。
-    const list = draft.characters.filter((c) => c.name.trim() || c.description.trim() || hasImage(c));
+    const list = draft.characters.filter((c) => c.name.trim() || c.description.trim() || c.imagePath);
     const missing = list.findIndex((c) => !c.name.trim());
     if (missing >= 0) {
       toast(`第 ${draft.characters.indexOf(list[missing]) + 1} 個角色沒有填角色名稱`, { error: true });
@@ -510,29 +560,15 @@ function renderEditor(app, initial) {
     saving = true;
     refreshSave();
     try {
-      // 先存文字，拿到新角色的 id（回來的順序跟送出去的一樣），再一張一張傳圖。
-      let res = await api.put(`/api/admin/mmg/${data.id}/intro`, {
+      data = await api.put(`/api/admin/mmg/${data.id}/intro`, {
         synopsis: draft.synopsis,
         owner_note: draft.owner_note,
         tags: draft.tags,
         characters: list.map((c) => ({ id: c.id, name: c.name, description: c.description })),
       });
-      const failed = [];
-      for (const [i, c] of list.entries()) {
-        const url = `/api/admin/mmg/${data.id}/characters/${res.characters[i].id}/image`;
-        try {
-          if (c.file) res = await api.upload(url, c.file);
-          else if (c.removeImage && c.imagePath) res = await api.del(url);
-        } catch (err) {
-          failed.push(`${c.name}（${err.message || '失敗'}）`);
-        }
-      }
-      data = res;
-      for (const c of draft.characters) if (c.fileUrl) URL.revokeObjectURL(c.fileUrl);
       draft.characters = fromServer(data.characters);
       saved = snapshot();
-      if (failed.length) toast(`文字已儲存，但這些角色的圖片沒有存到：${failed.join('、')}`, { error: true });
-      else toast('已儲存');
+      toast('已儲存');
     } catch (err) {
       toast(err.message || '儲存失敗', { error: true });
     } finally {
@@ -563,10 +599,10 @@ function renderEditor(app, initial) {
         el('label', { class: 'field__label' }, '封面圖'),
         coverHolder,
         el('div', { class: 'row' }, [
-          el('button', { class: 'btn btn--primary btn--small', type: 'button', onClick: () => fileInput.click() }, '上傳圖片'),
+          coverUploadBtn,
           removeBtn,
         ]),
-        el('div', { class: 'field__hint' }, 'JPG、PNG、WebP、GIF。會照原比例縮到最寬 1200、最高 1600，並清掉照片的拍攝位置等資訊'),
+        el('div', { class: 'field__hint' }, 'JPG、PNG、WebP、GIF。選了就直接存，不用按儲存。會照原比例縮到最寬 1200、最高 1600，並清掉照片的拍攝位置等資訊'),
         fileInput,
       ]),
 
@@ -587,7 +623,7 @@ function renderEditor(app, initial) {
         el('label', { class: 'field__label' }, `角色（最多 ${CHARACTERS_MAX} 個）`),
         charList,
         addCharBtn,
-        el('div', { class: 'field__hint' }, '沒有名稱的角色不能有介紹或圖片。圖片可以不放，沒放的角色文字會佔滿整排'),
+        el('div', { class: 'field__hint' }, '沒有名稱的角色不能有介紹或圖片。角色圖選了就直接存，不用按儲存；名稱與介紹要按儲存。圖片可以不放，沒放的角色文字會佔滿整排'),
       ]),
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label' }, `老闆的話（${OWNER_NOTE_MAX} 字以內）`),
