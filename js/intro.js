@@ -147,6 +147,7 @@ function renderEditor(app, initial) {
   };
   let data = initial;          // 後端最後一次給的完整資料（封面、價錢那些）
   let coverSrc = null;         // 封面的預覽網址（blob:）
+  let coverGen = 0;            // 封面載入的世代（見 loadCover）
   let saving = false;
 
   const preview = el('div', { class: 'intro-edit__preview' });
@@ -189,17 +190,25 @@ function renderEditor(app, initial) {
   }
 
   async function loadCover() {
-    if (coverSrc) URL.revokeObjectURL(coverSrc);
-    coverSrc = null;
+    // ★ 世代檢查（known-issue 第 2、26 條）：連續換兩次圖，第一次的圖可能比
+    //   第二次晚載完，沒擋的話預覽會停在舊的那張。
+    const mine = ++coverGen;
+    let src = null;
     if (data.cover_path) {
       // 管理員那一支不管上不上架都給，但要帶登入憑證，所以用 fetch 拿成 Blob。
       try {
         const blob = await api.blob(data.cover_path.replace('/api/public/', '/api/admin/'));
-        coverSrc = URL.createObjectURL(blob);
+        src = URL.createObjectURL(blob);
       } catch {
-        toast('封面圖讀取失敗', { error: true });
+        if (mine === coverGen) toast('封面圖讀取失敗', { error: true });
       }
     }
+    if (mine !== coverGen) {
+      if (src) URL.revokeObjectURL(src);
+      return;
+    }
+    if (coverSrc) URL.revokeObjectURL(coverSrc);
+    coverSrc = src;
     clear(coverHolder);
     coverHolder.append(
       coverSrc ? el('img', { class: 'intro__cover intro__cover--thumb', src: coverSrc, alt: '' })
