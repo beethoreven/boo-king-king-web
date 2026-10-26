@@ -969,3 +969,37 @@ iframe[src*="accounts.google.com"] {
 /* 行事曆的清單裡每一項最後一行是狀態：同一天混著各種狀態，
    沒有這一行就分不出哪一筆是哪一種。比其他 meta 亮一階。 */
 .list-item__status { color: var(--ink); }
+
+/* ── 劇本簡介頁（/mmg/<id>，見 js/intro.js）──────────────────────
+   公開頁面：沒登入的人也看得到。寬度跟主站一樣受 #app 的寬度限制。 */
+.intro { display: flex; flex-direction: column; gap: 14px; padding: 20px var(--pad) 32px; }
+.intro__title { font-size: 22px; font-weight: 700; line-height: 1.4; margin: 0; }
+/* 封面：照原比例，不裁切（後端已經縮過，這裡只是不讓它超出畫面）。
+   直的圖限制高度，免得手機上一張圖就佔滿好幾個螢幕。 */
+.intro__cover {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius);
+  align-self: center;
+}
+.intro__cover--thumb { max-height: 200px; align-self: flex-start; }
+.intro__block { display: flex; flex-direction: column; gap: 6px; }
+/* 簡介是純文字：保留店家打的換行，長網址之類的不換行字串也要能斷行。 */
+.intro__text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; color: var(--ink-soft); }
+/* 類型標籤跟時長、售價那一排分開：同樣的形狀、換一個顏色，一眼看得出是兩回事。 */
+.tag--genre { color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); }
+.tag__remove {
+  background: none; border: none; padding: 0 0 0 2px; margin: 0;
+  color: inherit; font: inherit; line-height: 1; cursor: pointer; opacity: .7;
+}
+.tag__remove:hover { opacity: 1; }
+/* 編輯模式下面的預覽，用一條線跟編輯區分開。 */
+.intro-edit__preview { border-top: 1px dashed var(--border); margin-top: 8px; }
+.intro-edit__cover { display: flex; }
+/* 簡介頁的品牌區塊、做成按鈕樣子的連結（編輯簡介頁、回劇本管理）：
+   它們是 <a>，不要連結的底線。 */
+a.topbar__brand--home, a.btn { text-decoration: none; }

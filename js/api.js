@@ -105,7 +105,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, query } = {}) {
+async function request(method, path, { body, query, file, asBlob } = {}) {
   const url = new URL(API_BASE + path, window.location.origin);
   if (query) {
     // 空字串一律不送——後端把「有這個參數但是空的」跟「沒有這個參數」
@@ -120,12 +120,14 @@ async function request(method, path, { body, query } = {}) {
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // 上傳檔案（封面圖）：檔案本身就是請求本體，不包成 JSON 也不用 multipart。
+  if (file !== undefined) headers['Content-Type'] = file.type || 'application/octet-stream';
 
   const startedAt = DEBUG_API ? performance.now() : 0;
   const res = await fetch(url, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: file !== undefined ? file : (body !== undefined ? JSON.stringify(body) : undefined),
   });
 
   if (DEBUG_API) {
@@ -146,6 +148,9 @@ async function request(method, path, { body, query } = {}) {
     setToken(null);
     onUnauthorized();
   }
+
+  // 要的是檔案本身（管理員預覽封面圖）：成功就回 Blob，失敗照下面的規則取錯誤訊息。
+  if (asBlob && res.ok) return res.blob();
 
   let payload = null;
   try {
@@ -172,4 +177,14 @@ export const api = {
   // DELETE 用查詢字串帶參數而不是 body：帶 body 的 DELETE 在各層
   // proxy 的處理不一致，有些會直接丟掉。
   del: (path, query) => request('DELETE', path, { query }),
+  // 檔案當請求本體送出（封面圖上傳）。
+  upload: (path, file) => request('PUT', path, { file }),
+  // 帶登入憑證拿一個二進位檔，回傳 Blob。<img src> 沒辦法帶憑證，管理員預覽
+  // 還沒上架的劇本的封面時用這個。
+  blob: (path) => request('GET', path, { asBlob: true }),
 };
+
+/** 後端的完整網址（含店家前綴）。公開的圖片用 <img src> 直接載，要完整網址。 */
+export function apiUrl(path) {
+  return new URL(API_BASE + path, window.location.origin).href;
+}
