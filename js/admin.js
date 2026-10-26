@@ -512,8 +512,17 @@ export function createAdminView({ tab, sub } = {}) {
           type: 'url', value: m.url ?? '', placeholder: 'https://…（留空＝沒有簡介）',
           onInput: setField('url'),
         }),
-        hint: '填了之後，各個畫面上的劇本名稱就會變成可以點的連結，開新分頁。只接受 http／https',
+        hint: '填了之後，各個畫面上的劇本名稱就會變成可以點的連結，開新分頁。只接受 http／https。'
+          + '要用本站的簡介頁，就把簡介頁的網址（/mmg/劇本編號）貼在這裡',
       }),
+      // 本站的簡介頁（js/intro.js）。新增中的劇本還沒有編號，存檔之後才有。
+      // ★ 開新分頁：這個表單可能有還沒存的修改，同一個分頁跳走就不見了。
+      m.id
+        ? el('a', {
+          class: 'btn btn--ghost btn--small', href: `/mmg/${m.id}?edit=1`,
+          target: '_blank', rel: 'noopener', style: 'align-self:flex-start',
+        }, '編輯簡介頁')
+        : null,
       el('div', { class: 'row' }, [
         field({ label: '時長（小時）', control: el('input', { type: 'number', step: '0.1', value: m.period ?? '', onInput: setNum('period') }) }),
         field({ label: '人數（顯示用）', control: el('input', { type: 'text', value: m.players ?? '', onInput: setField('players') }) }),

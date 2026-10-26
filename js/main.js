@@ -23,6 +23,7 @@ import { createRegisterView } from './register.js';
 import { createProfileView } from './profile.js';
 import { createMyBookingsView } from './mybookings.js';
 import { createMyCalendarView } from './mycalendar.js';
+import { startIntroPage } from './intro.js';
 import { readRoute, pushRoute, replaceRoute, onRouteChange, slugs, assertSlugs } from './route.js';
 
 const app = document.getElementById('app');
@@ -94,7 +95,7 @@ let currentView = 'booking';
  * 白底方塊會很突兀。
  */
 function brandIcon() {
-  return el('img', { class: 'topbar__mark', src: 'brand-mark.png', alt: '', 'aria-hidden': 'true' });
+  return el('img', { class: 'topbar__mark', src: '/brand-mark.png', alt: '', 'aria-hidden': 'true' });
 }
 
 /**
@@ -184,8 +185,8 @@ function userMenu() {
   // ★ 這兩頁同時也是 Google OAuth 同意畫面要求的「服務條款」與「隱私權
   //   政策」連結，發佈正式版的前提是那兩個網址連得到。所以它們是獨立的
   //   靜態頁，不是這套介面裡的一個 view。
-  items.push(menuLink('使用者條款', 'terms.html'));
-  items.push(menuLink('隱私權政策', 'privacy.html'));
+  items.push(menuLink('使用者條款', '/terms.html'));
+  items.push(menuLink('隱私權政策', '/privacy.html'));
   items.push(menuButton('登出', async () => { await logout(); start(); }));
 
   const panel = el('div', { class: 'menu__panel', hidden: true }, items);
@@ -506,7 +507,22 @@ function renderBlocked() {
         { error: true });
 }
 
+/**
+ * 劇本簡介頁的網址：/mmg/<id>（Cloudflare 的 _redirects 把它導到這個首頁）。
+ *
+ * 這一頁是公開的，不走下面的登入流程——沒登入的人也要看得到，那正是它存在的
+ * 目的（貼到群組、社群給還不是會員的人看）。畫面由 intro.js 一手包辦。
+ */
+// ★ /mmg/ 底下任何東西都歸簡介頁，不只數字：/mmg/abc 也要顯示「找不到這個劇本」，
+//   而不是落到主站的登入畫面（_redirects 把整個 /mmg/* 都導來這裡）。
+const INTRO_PATH = /^\/mmg\/([^/]*)\/?$/;
+const introMatch = window.location.pathname.match(INTRO_PATH);
+
 async function start() {
+  if (introMatch) {
+    await startIntroPage(app, introMatch[1]);
+    return;
+  }
   // 網址說了算。值可能是舊的、拼錯的、或這個人沒權限的，一律交給
   // renderApp() 去退——這裡不先驗證，驗證只留一個地方。
   currentView = viewRoute.toKey(readRoute().view) || 'booking';
@@ -526,13 +542,18 @@ async function start() {
 //   的話，會把預約畫面畫給一個還沒登入的人看。等他登入完再照 currentView
 //   落地就好。
 onRouteChange(({ view }) => {
+  // 簡介頁不在畫面切換裡（它自己有完整的網址），上一頁／下一頁不歸這裡管。
+  if (introMatch) return;
   currentView = viewRoute.toKey(view) || 'booking';
   if (getUser()) renderApp();
 });
 
-setUnauthorizedHandler(() => {
-  toast('登入已過期，請重新登入', { error: true });
-  renderLogin();
-});
+// 簡介頁有自己的處理（intro.js：公開頁面不該被換成登入畫面）。
+if (!introMatch) {
+  setUnauthorizedHandler(() => {
+    toast('登入已過期，請重新登入', { error: true });
+    renderLogin();
+  });
+}
 
 start();
