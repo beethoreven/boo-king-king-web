@@ -1013,6 +1013,38 @@ iframe[src*="accounts.google.com"] {
   color: inherit; font: inherit; line-height: 1; cursor: pointer; opacity: .7;
 }
 .tag__remove:hover { opacity: 1; }
+/* 角色：一個角色一排。有圖時右邊放縮圖（寬度約四成），文字在左；沒圖時文字佔滿。
+   案主提過「左半名稱與說明、右半圖片」。圖片改成約四成寬而不是一半：手機上
+   整頁只有三百多 px 寬，一半給圖的話，說明一行只剩七、八個字，一段介紹會拉得
+   很長；名稱也不固定佔上面四分之一，而是照字數自然排，短的介紹不會留一大塊空白。 */
+.intro-char { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+.intro-char--with-image { grid-template-columns: minmax(0, 1fr) 40%; }
+.intro-char + .intro-char { border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 6px; }
+.intro-char__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.intro-char__name { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+/* 縮圖統一 3:4 裁切，排起來整齊；點開看的是完整、不裁切的原圖。 */
+.intro-char__thumb {
+  padding: 0; border: none; background: none; cursor: zoom-in; display: block; width: 100%;
+}
+.intro-char__thumb img {
+  display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius);
+}
+/* 放大的角色圖：最大跟封面一樣（封面受 .app 寬度與 70vh 限制，見 .intro__cover）。 */
+.lightbox {
+  position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, .8);
+  display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out;
+}
+.lightbox__img {
+  max-width: min(100%, calc(480px - 2 * var(--pad)));
+  max-height: 70vh; width: auto; height: auto; object-fit: contain; border-radius: var(--radius);
+}
+.intro-edit__chars { display: flex; flex-direction: column; gap: 10px; }
+.intro-edit__char { display: flex; flex-direction: column; gap: 8px; }
+.intro-edit__char-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.intro-edit__char-actions { display: flex; gap: 6px; }
+.intro-edit__char-image { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.intro-edit__char-image .row { align-self: stretch; }
+.intro-edit__char-thumb { width: 96px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius); }
 /* 編輯模式下面的預覽，用一條線跟編輯區分開。 */
 .intro-edit__preview { border-top: 1px dashed var(--border); margin-top: 8px; }
 .intro-edit__cover { display: flex; }
