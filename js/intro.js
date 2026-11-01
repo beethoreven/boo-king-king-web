@@ -126,10 +126,11 @@ function renderMissing(app, err, { isAdmin, mmgId }) {
     ? [el('a', { class: 'btn btn--primary btn--small', href: `/mmg/${mmgId}?edit=1` }, '編輯簡介頁')]
     : [];
   app.append(topbar(actions), el('div', { class: 'empty' }, message));
-  // 管理員看到 404 多半是「這齣還沒上架」：簡介頁只公開上架中的劇本。
+  // 管理員看到 404 多半是「這齣下架了」：簡介頁只有下架的不公開（尚未上架的照樣公開，
+  // 好讓店家先拿去打廣告）。
   if (isAdmin && status === 404) {
     app.append(el('div', { class: 'field__hint', style: 'text-align:center' },
-      '只有上架中的劇本會公開。還沒上架的劇本可以先進編輯頁準備內容。'));
+      '下架的劇本不會公開。改回「上架」或「尚未上架」就看得到，下架期間也可以進編輯頁準備內容。'));
   }
 }
 
@@ -593,7 +594,7 @@ function renderEditor(app, initial) {
       el('div', { class: 'section__label' }, `編輯簡介頁：${data.name}`),
       data.public
         ? el('div', { class: 'field__hint' }, `公開網址：${window.location.origin}/mmg/${data.id}`)
-        : el('div', { class: 'field__warn' }, '這齣目前沒有上架，公開網址會顯示「找不到這個劇本」。上架之後才會公開。'),
+        : el('div', { class: 'field__warn' }, '這齣目前是下架狀態，公開網址會顯示「找不到這個劇本」。改回「上架」或「尚未上架」就會公開。'),
 
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label' }, '封面圖'),
