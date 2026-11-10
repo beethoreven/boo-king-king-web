@@ -16,59 +16,70 @@ const CLIENT_ID =
   window.__GOOGLE_CLIENT_ID__ ??
   '';
 
-let currentUser = null;
-
-// 已經登入（Google 驗過身分、手上有 session）但還沒在這個系統註冊的人。
-// 這是第三種狀態：既不是「沒登入」，也不是「登入了可以用」。
-// 被停權的人不會落在這裡——他註冊過，只是被關掉了，該看到的是別的訊息。
-let pendingRegistration = null;
-
-// 登入了、註冊過，但帳號被停權。這是第四種狀態：他進得了畫面，只是
-// 什麼都做不了。跟「沒登入」分開，否則他會被丟回登入頁一直重登。
+// ── 「我是誰」：四種狀態，一次只會是其中一種 ──────────────────────
 //
-// 存的是整包資訊而不只是狀態字串，因為兩種停權要說的話不一樣：
-//   deactive —— 店家關掉的，只能聯絡店家
-//   banned   —— 系統判定的異常行為，有明確的到期時間可以告訴他
-let blockedStatus = null;
+//   { kind: 'signedOut' }                                 沒登入
+//   { kind: 'unregistered', email }                       Google 驗過、手上有 session，
+//                                                         但還沒在這個系統註冊——該給註冊表單
+//   { kind: 'blocked', status, bannedUntil, adminName }   註冊過但被關掉——進得了畫面、
+//                                                         什麼都做不了；跟「沒登入」分開，
+//                                                         否則他會被丟回登入頁一直重登
+//   { kind: 'signedIn', user }                            可以用
+//
+// ★ 為什麼是一個變數而不是三個（2026-11-10 改）：原本是 currentUser、
+//   pendingRegistration、blockedStatus 三個各自可為空的變數，組合有 8 種、
+//   合法的只有 4 種，每一個寫入點都得記得三個一起設。實際咬過兩次：
+//     - 登出只清了 currentUser，註冊畫面按「取消」又被畫回來（2026-09-21）
+//     - blockedStatus 從 /auth/status 來是物件、從登入來是字串 'banned'，
+//       剛登入的停權者看到的是「未授權，請聯絡店家」而不是停權到幾點
+//   一個變數的話，不合法的組合寫不出來；停權資訊也只剩 blockedFrom() 一個來源。
+//
+// blocked 的 status 是 'deactive'（店家關的，只能聯絡店家）、'banned'（系統判定，
+// 有到期時間可以告訴他）或 'deleted'。bannedUntil 只有 banned 才有值，null 代表
+// 無限期，只能等管理員手動解。
+const SIGNED_OUT = Object.freeze({ kind: 'signedOut' });
+let identity = SIGNED_OUT;
 
-export function getUser() {
-  return currentUser;
+/** /auth/status 的回應 → 停權狀態。停權資訊只從這裡組，不在別處各拼一份。 */
+function blockedFrom(status) {
+  return {
+    kind: 'blocked',
+    status: status.status,
+    bannedUntil: status.banned_until ?? null,
+    adminName: status.admin_name ?? null,
+  };
 }
 
-/**
- * 把「我是誰」的狀態整組清掉。
- *
- * ★ 這三個是一組的，不能只清一半。原本 logout() 只清 currentUser，
- *   pendingRegistration 留著——結果在註冊畫面按「取消」時，登出確實做了
- *   （後端回 200、token 也清了），但 start() 重新判斷時還是看到「待註冊」，
- *   又把註冊畫面畫回來，看起來就像按鈕沒反應（2026-09-21 案主回報）。
- *   同樣的洞在停權畫面按登出也會中。
- */
-function clearIdentity() {
-  currentUser = null;
-  pendingRegistration = null;
-  blockedStatus = null;
+/** /auth/status 的回應 → 四種狀態之一。 */
+function identityFrom(status) {
+  // authorized=false 有兩種原因，要分開：
+  //   registered=false —— 還沒填聯絡資料，該給他註冊表單
+  //   registered=true  —— 註冊過但被停權，重登幾次都一樣，該叫他聯絡店家
+  if (status.authorized) return { kind: 'signedIn', user: status };
+  if (!status.registered) return { kind: 'unregistered', email: status.email };
+  return blockedFrom(status);
+}
+
+export function getUser() {
+  return identity.kind === 'signedIn' ? identity.user : null;
 }
 
 /** 已登入但還沒註冊時回傳 { email }，否則 null。 */
 export function getPendingRegistration() {
-  return pendingRegistration;
+  return identity.kind === 'unregistered' ? { email: identity.email } : null;
 }
 
-/**
- * 帳號被停權時回傳 { status, bannedUntil, adminName }，否則 null。
- *
- * status 是 'deactive'（店家關的）或 'banned'（系統判定的異常行為）。
- * bannedUntil 只有 banned 才有值，而且可能是 null——那代表無限期，
- * 只能等管理員手動解。
- */
+/** 帳號被停權時回傳 { status, bannedUntil, adminName }，否則 null。 */
 export function getBlockedStatus() {
-  return blockedStatus;
+  if (identity.kind !== 'blocked') return null;
+  const { status, bannedUntil, adminName } = identity;
+  return { status, bannedUntil, adminName };
 }
 
 /** 目前登入者是否至少有這個等級的權限（1 管理員 ⊃ 2 主持人 ⊃ 3 玩家）。 */
 export function hasRole(minimum) {
-  return Boolean(currentUser && currentUser.role <= minimum);
+  const user = getUser();
+  return Boolean(user && user.role <= minimum);
 }
 
 /**
@@ -77,31 +88,16 @@ export function hasRole(minimum) {
  */
 export async function refreshStatus() {
   if (!getToken()) {
-    // 沒有 token 就是「什麼身分都沒有」，待註冊與停權也一起清掉。
-    clearIdentity();
+    identity = SIGNED_OUT;
     return null;
   }
   try {
-    const status = await api.get('/auth/status');
-    // authorized=false 有兩種原因，要分開：
-    //   registered=false —— 還沒填聯絡資料，該給他註冊表單
-    //   registered=true  —— 註冊過但被停權，重登幾次都一樣，該叫他聯絡店家
-    currentUser = status.authorized ? status : null;
-    pendingRegistration = (!status.authorized && !status.registered)
-      ? { email: status.email } : null;
-    blockedStatus = (!status.authorized && status.registered)
-      ? {
-          status: status.status,
-          bannedUntil: status.banned_until ?? null,
-          adminName: status.admin_name ?? null,
-        }
-      : null;
-    return currentUser;
+    identity = identityFrom(await api.get('/auth/status'));
   } catch {
     // 401 已經在 api.js 清掉 token 並觸發 handler
-    clearIdentity();
-    return null;
+    identity = SIGNED_OUT;
   }
+  return getUser();
 }
 
 /** 拿 Google ID token 換我們自己的 session token。 */
@@ -112,31 +108,25 @@ async function loginWithGoogle(idToken) {
   // 就是剛才登入的那個 email」。回傳 null 讓呼叫端知道還不能進主畫面，
   // 該走註冊。
   if (result.registered === false) {
-    currentUser = null;
-    pendingRegistration = { email: result.email };
-    blockedStatus = null;
+    identity = { kind: 'unregistered', email: result.email };
     return null;
   }
-  // 被停權的人一樣拿到 session（要讓他進得了畫面看見自己被擋），
-  // 但不是一個可以用的使用者。
+  // 被停權的人一樣拿到 session（要讓他進得了畫面看見自己被擋），但登入的
+  // 回應只說了 status，沒有到期時間與管理員名字。拿剛到手的 session 問一次
+  // /auth/status，讓停權畫面只有一個資料來源——跟重新整理之後看到的一模一樣。
+  // 只有被停權的人會多這一次請求。
   if (result.authorized === false) {
-    currentUser = null;
-    pendingRegistration = null;
-    blockedStatus = result.status;
-    return null;
+    return refreshStatus();
   }
-  currentUser = { ...result, authorized: true };
-  pendingRegistration = null;
-  blockedStatus = null;
-  return currentUser;
+  identity = { kind: 'signedIn', user: { ...result, authorized: true } };
+  return getUser();
 }
 
 /** 送出註冊。成功之後手上那張 session 直接就能用，不必重新登入。 */
 export async function register(data) {
   const result = await api.post('/auth/register', data);
-  currentUser = { ...result, authorized: true };
-  pendingRegistration = null;
-  return currentUser;
+  identity = { kind: 'signedIn', user: { ...result, authorized: true } };
+  return getUser();
 }
 
 export async function logout() {
@@ -146,7 +136,7 @@ export async function logout() {
     // 後端說不行也沒關係——本地清掉 token，登出的目的就達成了
   }
   setToken(null);
-  clearIdentity();
+  identity = SIGNED_OUT;
   // Google 那一側能做的只有這一件事：關掉「下次自動用同一個帳號登入」。
   // 我們登不出使用者的 Google 帳號，那是瀏覽器裡 Google 自己的登入狀態。
   //
