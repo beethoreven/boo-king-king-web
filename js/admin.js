@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink,
          dualPrice, dayTypeOf, depositDue, DAY_TYPE_LABEL } from './ui.js';
 import { adminMaySave } from './conflicts.js';
+import { confirmUserBlock, confirmMmgDelist, confirmRevive, confirmReconfirm } from './impact.js';
 import { showGms } from './gms-dialog.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
          STATUS_SLUG, newInstance } from './route.js';
@@ -583,6 +584,11 @@ export function createAdminView({ tab, sub } = {}) {
               });
               return;
             }
+            // 下架之前把這齣戲未來的場次列出來（案主 2026-11-10）。
+            const before = m.id ? s.items.find((x) => x.id === m.id) : null;
+            if (before && before.status !== 'inactive' && m.status === 'inactive') {
+              if (!await confirmMmgDelist(m.id, m.name)) return;
+            }
             // 存檔前把排期的工作副本轉回要送出去的形狀。
             save(
               m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
@@ -1023,6 +1029,12 @@ export function createAdminView({ tab, sub } = {}) {
                 confirmText: '確認變更',
               });
               if (!ok) return;
+            }
+            // 從啟用改成停用／停權之前，把這個人未來的場次列出來（案主 2026-11-10）。
+            // original.status 是當下生效的狀態（後端已換算過停權到期）。
+            if (original && original.status === 'active'
+                && (u.status === 'deactive' || u.status === 'banned')) {
+              if (!await confirmUserBlock(u.id, original.name || original.email, u.status)) return;
             }
             save(
               u.id ? `/api/admin/users/${u.id}` : '/api/admin/users', u,
@@ -1779,7 +1791,8 @@ export function bookingEditorNode(ctx) {
           if (target !== 'cancelled' && (statusChanged || newlyConfirmed)) {
             if (!await adminMaySave(item.id)) return;
 
-            const outstanding = unconfirmedRoles(item, mmg);
+            // 改回「待主持確認」時主持人的確認會被清掉，這一題問了沒有意義。
+            const outstanding = target === 'gm_confirm' ? [] : unconfirmedRoles(item, mmg);
             if (outstanding.length) {
               const ok = await confirmDialog({
                 title: '目前尚有主持人未確認',
@@ -1789,6 +1802,22 @@ export function bookingEditorNode(ctx) {
               });
               if (!ok) return;
             }
+          }
+          // 從別的狀態改回「待主持確認」：主持人的確認會全部取消、系統寄信請
+          // 他們重新確認（後端也會清，這裡先清是為了讓畫面跟存進去的一致）。
+          if (original && original.status !== 'gm_confirm' && target === 'gm_confirm') {
+            const gms = (mmg?.gm_slots ?? []).flatMap((slot, i) => {
+              const id = item.gm_user_ids[i];
+              if (!slot.name || !id) return [];
+              const who = gmCandidates.find((c) => c.id === id);
+              return [{ name: who?.name ?? `id=${id}`, role: slot.name }];
+            });
+            if (!await confirmReconfirm(gms)) return;
+            item.gm_confirmed = item.gm_confirmed.map(() => false);
+          }
+          // 把已取消的改回來：會排第幾、誰會往後移。
+          if (original && original.status === 'cancelled' && target !== 'cancelled') {
+            if (!await confirmRevive(item.id, target)) return;
           }
           if (await submitBooking(`/api/admin/bookings/${item.id}`, item)) {
             ctx.onSaved({ created: false, item });
