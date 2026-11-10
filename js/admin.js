@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { el, clear, select, field, toast, confirmDialog, alertDialog, spinner, scriptName, asyncLink,
          dualPrice, dayTypeOf, DAY_TYPE_LABEL } from './ui.js';
 import { adminMaySave } from './conflicts.js';
+import { confirmUserBlock, confirmMmgDelist, confirmRevive } from './impact.js';
 import { setRouteTab, setRouteSub, slugs, assertSlugs, slugGap, slugGapNode,
          STATUS_SLUG, newInstance } from './route.js';
 
@@ -580,6 +581,11 @@ export function createAdminView({ tab, sub } = {}) {
               });
               return;
             }
+            // 下架之前把這齣戲未來的場次列出來（案主 2026-11-10）。
+            const before = m.id ? s.items.find((x) => x.id === m.id) : null;
+            if (before && before.status !== 'inactive' && m.status === 'inactive') {
+              if (!await confirmMmgDelist(m.id, m.name)) return;
+            }
             // 存檔前把排期的工作副本轉回要送出去的形狀。
             save(
               m.id ? `/api/admin/mmg/${m.id}` : '/api/admin/mmg', closeSchedule(m),
@@ -967,6 +973,12 @@ export function createAdminView({ tab, sub } = {}) {
                 confirmText: '確認變更',
               });
               if (!ok) return;
+            }
+            // 從啟用改成停用／停權之前，把這個人未來的場次列出來（案主 2026-11-10）。
+            // original.status 是當下生效的狀態（後端已換算過停權到期）。
+            if (original && original.status === 'active'
+                && (u.status === 'deactive' || u.status === 'banned')) {
+              if (!await confirmUserBlock(u.id, original.name || original.email, u.status)) return;
             }
             save(
               u.id ? `/api/admin/users/${u.id}` : '/api/admin/users', u,
@@ -1643,6 +1655,12 @@ export function bookingEditorNode(ctx) {
           // 查詢——免費方案的額度要花在有意義的地方。
           if (target !== 'cancelled' && statusChanged) {
             if (!await adminMaySave(item.id)) return;
+          }
+          // ★ 沒有「改回待主持確認」的對話框：這個分支的狀態選項沒有待主持確認
+          //   （唯一主持人不需要確認），main 上那一段在這裡用不到。
+          // 把已取消的改回來：會排第幾、誰會往後移。
+          if (original && original.status === 'cancelled' && target !== 'cancelled') {
+            if (!await confirmRevive(item.id, target)) return;
           }
           if (await submitBooking(`/api/admin/bookings/${item.id}`, item)) {
             ctx.onSaved({ created: false, item });
