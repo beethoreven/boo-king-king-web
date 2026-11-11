@@ -8,7 +8,7 @@
  *
  * ## 點與清單刻意不一致
  *
- * 點不畫已取消的場次，清單全部列出（案主 2026-09-17 定案）。兩者回答的問題
+ * 點不畫已取消的場次，清單全部列出。兩者回答的問題
  * 不同：點回答「那天有沒有事」，清單回答「那天這筆後來怎麼了」。
  * 這條規則由後端的兩支 API 決定，這裡只是照著顯示。
  *
@@ -29,7 +29,7 @@ const isoOf = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 //
 // ★ 這個數字是量出來的，不是美感：日曆一格在 320px 的手機上約 39px 寬，
 //   6px 的點加 3px 間距，4 個點要 33px，第 5 個就擠出去了。
-//   案主 2026-09-17 定案「4 場以上一律一條線」——店家看四場跟十場的意義
+//   規則：4 場以上一律一條線——店家看四場跟十場的意義
 //   一樣，只是要確認有沒有人亂訂，所以不做「三個點加 +N」那種變體。
 const MAX_DOTS = 3;
 
@@ -46,8 +46,8 @@ const MAX_DOTS = 3;
  * @param {(iso: string) => Promise} opts.busy.set
  * @param {(iso: string) => Promise} opts.busy.clear
  * @param {(iso, statuses) => Promise<boolean>} [opts.busy.beforeSet]
- *        設定前問一次。回 false 就不設——那天已經有場次時要先警告（案主定案：
- *        警告過還是要設就讓他設）。statuses 是那天的點，畫面手上本來就有，
+ *        設定前問一次。回 false 就不設——那天已經有場次時要先警告，
+ *        警告過還是要設就讓他設。statuses 是那天的點，畫面手上本來就有，
  *        所以不必為了問「那天有沒有場次」多打一支 API。
  * @param {() => Promise<boolean>} [opts.canLeave]
  *        換日期、換月份之前問一次。清單上有打開、還沒存的編輯畫面時，要先問
@@ -107,8 +107,8 @@ export function createCalendarPage({
   const fieldMonth = numberField('MM', 1, 12);
   const fieldDay = numberField('DD', 1, 31);
 
-  // 忙碌日的按鈕就放在年月日那一排右邊（案主 2026-09-18：那裡剛好還有位置，
-  // 放下去一排剛好滿）。沒選日期時按不下去——它作用在「選中的那一天」。
+  // 忙碌日的按鈕就放在年月日那一排右邊：那裡剛好還有位置，
+  // 放下去一排剛好滿。沒選日期時按不下去——它作用在「選中的那一天」。
   const busyBtn = busy
     ? el('button', { class: 'btn btn--ghost btn--small', onClick: () => toggleBusy() }, '設定忙碌日')
     : null;
@@ -318,11 +318,11 @@ export function createCalendarPage({
   }
 
   /**
-   * 一格底下的點。四場以上改成一條線（案主定案，見 MAX_DOTS）。
+   * 一格底下的點。四場以上改成一條線（見 MAX_DOTS）。
    *
    * ★ 沒有場次的日子也回傳這一列，只是裡面是空的。省掉的話，有點的格子
-   *   會把數字往上擠，整個月的數字就高高低低——案主 2026-09-18 在線上
-   *   看到的就是這個。寧可每一格都先空出這 6px，也不要歪。
+   *   會把數字往上擠，整個月的數字就高高低低（2026-09-18
+   *   在線上實際發生過）。寧可每一格都先空出這 6px，也不要歪。
    */
   function marks(statuses) {
     const inner = statuses.length > MAX_DOTS

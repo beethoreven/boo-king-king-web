@@ -76,7 +76,7 @@ export function createCalendar({ onPick, loadMonth }) {
   //   選——看起來就像店家那個月完全沒開。實測確認過。
   let seq = 0;
 
-  // 觸發用的欄位。外觀跟原本那個原生輸入框一致——案主要的是「沒開放
+  // 觸發用的欄位。外觀跟原本那個原生輸入框一致——要的是「沒開放
   // 不能點」，不是換一套視覺。
   const trigger = el('button', {
     type: 'button',

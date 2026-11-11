@@ -32,7 +32,7 @@
   --dot-ended: #6f675d;    /* 已結束 */
 
   /* 忙碌日那一格：底色比背景亮一階，再加一圈外框。
-     ★ 只靠底色的話幾乎看不出來（案主 2026-09-18：「框框超不清楚」），所以
+     ★ 只靠底色的話幾乎看不出來（2026-09-18 線上實際看過），所以
        外框用白色、2px，一眼就看得到。 */
   --busy-bg: #2b2620;
   --busy-ring: #ffffff;
@@ -844,7 +844,7 @@ iframe[src*="accounts.google.com"] {
 .link:hover { text-decoration-thickness: 2px; }
 
 /* 搜尋框 + 簡介按鈕同一排。搜尋框縮短、右邊留給按鈕。
-   案主的規格：搜尋框大約容納 20 個字就夠，不需要佔滿整排。 */
+   規格：搜尋框大約容納 20 個字就夠，不需要佔滿整排。 */
 .search-row { display: flex; align-items: center; gap: 8px; }
 .search-row .search-wrap { flex: 1 1 auto; min-width: 0; }
 .search-row .search-wrap input { width: 100%; }
@@ -957,7 +957,7 @@ iframe[src*="accounts.google.com"] {
    長滿整列：三格撐滿之後，數字之間離得比日曆格子還開，而且那一排右邊之後
    要放主持人與店家版本的「設定忙碌日」。 */
 .dt-row--jump { padding-top: 10px; }
-/* 三格平常是固定寬，窄螢幕時縮小，讓「設定忙碌日」留在同一排（案主：放在
+/* 三格平常是固定寬，窄螢幕時縮小，讓「設定忙碌日」留在同一排（放在
    那裡剛好一排滿）。下限是「數字還放得下」：四位數的年約 44px、兩位數約 26px。
    ★ 不用換行解：一允許換行，瀏覽器會先換行再考慮縮格子，連 390px 的手機
      按鈕都會掉到下一行（2026-09-18 實測）。 */
@@ -974,8 +974,8 @@ iframe[src*="accounts.google.com"] {
    公開頁面：沒登入的人也看得到。寬度跟主站一樣受 #app 的寬度限制。
 
    ★ 簡介頁的主色（按鈕、區塊框、區塊標題）自成一組 token，不直接用 --accent：
-     步經徑就是 --accent 的黃，eli 的 --accent 是深棕，簡介頁要用粉紫（案主
-     2026-10-26）。店家分支只改下面這兩個值，不要去改用到它們的規則。 */
+     步經徑就是 --accent 的黃，eli 的 --accent 是深棕，簡介頁要用粉紫。
+     店家分支只改下面這兩個值，不要去改用到它們的規則。 */
 .intro-page {
   --intro-accent: var(--accent);
   --on-intro-accent: var(--on-accent);
@@ -998,15 +998,14 @@ iframe[src*="accounts.google.com"] {
 }
 .intro__cover--thumb { max-height: 200px; align-self: flex-start; }
 /* 劇本簡介、角色簡介、老闆的話各一個主色框：內容都是一長段文字，沒框的話
-   一段接一段，看不出哪裡換了主題（案主 2026-10-26）。 */
+   一段接一段，看不出哪裡換了主題。 */
 .intro__block {
   display: flex; flex-direction: column; gap: 6px;
   border: 1px solid var(--intro-accent); border-radius: var(--radius); padding: 14px 16px;
 }
 .intro__block .section__label { color: var(--intro-accent); }
 /* 簡介是純文字：保留店家打的換行，長網址之類的不換行字串也要能斷行。 */
-/* 主文字色（步經徑是白、eli 是近黑），不用次要的灰：簡介頁的主角就是這幾段字
-   （案主 2026-10-26）。 */
+/* 主文字色（步經徑是白、eli 是近黑），不用次要的灰：簡介頁的主角就是這幾段字。 */
 .intro__text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; color: var(--ink); }
 /* 類型標籤跟時長、售價那一排分開：同樣的形狀、換一個顏色，一眼看得出是兩回事。 */
 .tag--genre { color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); }
@@ -1016,7 +1015,7 @@ iframe[src*="accounts.google.com"] {
 }
 .tag__remove:hover { opacity: 1; }
 /* 角色：一個角色一排。有圖時右邊放縮圖（寬度約四成），文字在左；沒圖時文字佔滿。
-   案主提過「左半名稱與說明、右半圖片」。圖片改成約四成寬而不是一半：手機上
+   最初的版面是「左半名稱與說明、右半圖片」。圖片改成約四成寬而不是一半：手機上
    整頁只有三百多 px 寬，一半給圖的話，說明一行只剩七、八個字，一段介紹會拉得
    很長；名稱也不固定佔上面四分之一，而是照字數自然排，短的介紹不會留一大塊空白。 */
 .intro-char { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
