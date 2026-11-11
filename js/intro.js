@@ -242,7 +242,7 @@ function renderEditor(app, initial) {
   let coverGen = 0;            // 封面載入的世代（見 loadCover）
   let coverBusy = false;       // 封面上傳／移除中
   let saving = false;
-  // ★ 圖片（封面、角色圖）選了就直接存，不用按儲存（案主 2026-10-26）；儲存鈕只管
+  // ★ 圖片（封面、角色圖）選了就直接存，不用按儲存；儲存鈕只管
   //   文字、標籤、角色清單。所以 snapshot 不含圖片。
   //
   // 最後一次存進去的內容。草稿跟它一樣就是「沒改過」，儲存鈕停用（跟劇本管理一致：
@@ -287,8 +287,8 @@ function renderEditor(app, initial) {
   const preview = el('div', { class: 'intro-edit__preview' });
   const tagList = el('div', { class: 'tag-row' });
   const tagInput = el('input', {
-    // ★ 不接 Enter：注音、倉頡選字時按的 Enter 也會觸發，字還沒選完就被加進去了
-    //   （案主 2026-10-26）。一律按「加入」。
+    // ★ 不接 Enter：注音、倉頡選字時按的 Enter 也會觸發，字還沒選完就被加進去了。
+    //   一律按「加入」。
     type: 'text', maxlength: String(TAG_MAX_CHARS), placeholder: '例如：懸疑',
   });
   const coverHolder = el('div', { class: 'intro-edit__cover' });
@@ -313,7 +313,7 @@ function renderEditor(app, initial) {
   function refreshSave() {
     saveBtn.disabled = saving || busy.size > 0 || snapshot() === saved;
     // ★ 存檔中整個編輯區不能動：存完會用後端回來的資料重建角色清單（新角色才有 id），
-    //   存檔途中打的字會被那一次重建蓋掉，而且不會有任何提示（known-issue 第 2 條）。
+    //   存檔途中打的字會被那一次重建蓋掉，而且不會有任何提示。
     if (form) form.inert = saving;
   }
 
@@ -493,7 +493,7 @@ function renderEditor(app, initial) {
   }
 
   async function loadCover() {
-    // ★ 世代檢查（known-issue 第 2、26 條）：連續換兩次圖，第一次的圖可能比
+    // ★ 世代檢查（過期的非同步回應不能覆蓋較新的狀態）：連續換兩次圖，第一次的圖可能比
     //   第二次晚載完，沒擋的話預覽會停在舊的那張。
     const mine = ++coverGen;
     let src = null;

@@ -578,7 +578,7 @@ export function createAdminView({ tab, sub } = {}) {
               });
               return;
             }
-            // 下架之前把這齣戲未來的場次列出來（案主 2026-11-10）。
+            // 下架之前把這齣戲未來的場次列出來。
             const before = m.id ? s.items.find((x) => x.id === m.id) : null;
             if (before && before.status !== 'inactive' && m.status === 'inactive') {
               if (!await confirmMmgDelist(m.id, m.name)) return;
@@ -859,7 +859,7 @@ export function createAdminView({ tab, sub } = {}) {
               });
               if (!ok) return;
             }
-            // 從啟用改成停用／停權之前，把這個人未來的場次列出來（案主 2026-11-10）。
+            // 從啟用改成停用／停權之前，把這個人未來的場次列出來。
             // original.status 是當下生效的狀態（後端已換算過停權到期）。
             if (original && original.status === 'active'
                 && (u.status === 'deactive' || u.status === 'banned')) {
@@ -1272,9 +1272,9 @@ export function storeCard(item, { onEdit, showStatus = false } = {}) {
 //
 // 兩種忙碌日的處置不同（見後端 db/busy.py）：
 //   店家忙碌日   可以放行——管理員這條路本來就不問排期——但要先過一個對話框
-//   主持人忙碌日 硬擋，管理員也不能放行（案主 2026-09-18）
+//   主持人忙碌日 硬擋，管理員也不能放行
 //
-// 這兩句話是案主給的原文，不要改寫。
+// 這兩句話是店家指定的文字，改字前先跟店家確認。
 
 const BUSY_STORE_MSG = '當天已經被標記為店家忙碌日，請確定當天店家有開放服務再下定。';
 const BUSY_GM_MSG = '主持人將當天設定為忙碌日，管理員不能在當日為其指派場次，'
@@ -1491,7 +1491,7 @@ export function bookingEditorNode(ctx) {
           // 忙碌日排在所有檢查前面：主持人忙碌日是硬擋，後面的撞期檢查
           // 問了也沒用；店家忙碌日要他先表態，否則後面那幾個對話框都白答。
           //
-          // ★ 多個問題就在同一個對話框列多句（案主 2026-09-18）。
+          // ★ 多個問題就在同一個對話框列多句。
           const moved = !original || item.session_date !== original.session_date;
           const busyInfo = await fetchBusy(item.session_date, item.gm_user_ids);
           const assigned = new Set(assignedThisTime(item, original));

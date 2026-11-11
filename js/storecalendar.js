@@ -8,7 +8,7 @@
  * 「哪幾天有場次、那天排了什麼」。所以這裡不分頁籤，一天之內混著列，
  * 每一項自己講自己的狀態。
  *
- * 點只畫非取消的場次，清單全部列出（案主 2026-09-17 定案）。
+ * 點只畫非取消的場次，清單全部列出。
  */
 
 import { api } from './api.js';
@@ -112,7 +112,7 @@ export function createStoreCalendarView() {
       load: async (ym) => (await api.get(`/api/admin/busy/${ym}`)).dates,
       set: (iso) => api.post('/api/admin/busy', { date: iso }),
       clear: (iso) => api.del(`/api/admin/busy/${iso}`),
-      // 那天已經有場次還是可以設（案主定案），但要先講清楚後果——那些場次
+      // 那天已經有場次還是可以設，但要先講清楚後果——那些場次
       // 不會自動消失，得有人去處置。這裡不另外打 API 問：日曆上那一格的點
       // 就是那天的場次，畫面手上已經有了。
       beforeSet: (iso, statuses) => statuses.length

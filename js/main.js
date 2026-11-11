@@ -92,7 +92,7 @@ let currentView = 'booking';
  *
  * 要換圖就直接覆蓋那個檔案，這裡不用動——尺寸與對齊都由 CSS 的
  * .topbar__mark 決定。頂欄是白底，所以圖有沒有透明背景都可以；
- * 目前這張冰淇淋是**刻意**帶著粉紅底的（案主確認）。
+ * 目前這張冰淇淋是**刻意**帶著粉紅底的，不是去背沒做好。
  */
 function brandIcon() {
   return el('img', { class: 'topbar__mark', src: '/brand-mark.png', alt: '', 'aria-hidden': 'true' });
@@ -233,7 +233,7 @@ function menuIcon() {
  *   刻意的：場次確認與指定行事曆是同一件事的兩種看法（同一批場次，一個按
  *   狀態分、一個按日期分），不是兩個工作區域。互跳不會讓人搞不清自己在哪。
  *
- * 按鈕放在「回到預約」的左邊（案主指定）。
+ * 按鈕放在「回到預約」的左邊。
  */
 const PAIRED = {
   admin: { to: 'storecalendar', label: '場次行事曆' },
