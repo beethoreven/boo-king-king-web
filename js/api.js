@@ -9,6 +9,33 @@
 const HOST = window.location.hostname;
 const IS_LOCAL = HOST === 'localhost' || HOST === '127.0.0.1' || HOST === '[::1]';
 
+/**
+ * 開發用的網址參數（?apiBase=、?googleClientId=）。**只在本機有效**，正式站
+ * 一律當作沒帶。
+ *
+ * ★ 網址參數是任何人都能寫進連結裡的東西。這一頁會把登入憑證附在每一個請求上
+ *   （見 request()），所以正式站要是照著 ?apiBase= 走，別人寄來一個「網域是真的」
+ *   的連結，頁面一載入就把憑證送到連結指定的主機——不必點任何東西，也不需要
+ *   在頁面裡注入程式。沒登入的人在那一頁按 Google 登入，換到的 Google 憑證
+ *   同樣會送過去。
+ *
+ *   實測（2026-11-19，修正前）：帶 ?apiBase= 開頁面，參數指定的主機收到
+ *   GET /auth/status，標頭帶著 Authorization: Bearer <憑證>。
+ *
+ *   ?googleClientId= 同理：它決定 Google 登入換到的憑證是發給哪一個應用程式的。
+ *
+ * ★ 判斷看的是**這一頁自己掛在哪個主機**（IS_LOCAL），不是看參數的值像不像
+ *   本機——寫連結的人控制得了參數，控制不了這一頁的網域。
+ *
+ * ★ 這類參數一律從這一支讀，不要自己 new URLSearchParams：分散出去的那一個，
+ *   就是少了這道檢查的那一個（tests/dev-params.test.mjs 會擋）。
+ *   ?debug=api 不經過這裡：它只開主控台的計數，不改變請求送去哪裡。
+ */
+export function devParam(name) {
+  if (!IS_LOCAL) return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
+
 // 後端位址，依序取第一個有值的。
 //
 // ★ 本機那一段不能省。index.html 裡寫死的是**正式站**的後端網址，而本機開發
@@ -23,8 +50,9 @@ const IS_LOCAL = HOST === 'localhost' || HOST === '127.0.0.1' || HOST === '[::1]
 //   附帶一提，預檢那個 OPTIONS 還是會送到正式站，把它叫醒。
 //
 //   所以這裡直接給本機一個合理的預設值，讓那個紀律變成不必要。5001 是後端的
-//   預設 port（app.py 的 PORT 預設值）。要在本機打正式站仍然可以，帶
-//   ?apiBase= 就好——查詢參數永遠優先。
+//   預設 port（app.py 的 PORT 預設值）。要在本機打別的後端（例如正式站）仍然
+//   可以，帶 ?apiBase= 就好——在本機，查詢參數優先。正式站不讀這個參數
+//   （見上面的 devParam）。
 //
 // 部署形狀只有「靜態託管前端 + Render 後端」一種，不必處理同源或其他託管方式，
 // 所以只分本機與正式站兩種。
@@ -40,7 +68,7 @@ const PREFIX = VARIANT ? `/v/${VARIANT}` : '';
 // ★ 本機那一段也要帶前綴。後端目前為了讓 cron-job.org 有時間改設定，暫時
 //   還接受不帶前綴的舊路徑；那個放行一收掉，沒帶前綴的本機開發就會全部 404。
 const API_BASE =
-  new URLSearchParams(window.location.search).get('apiBase') ??
+  devParam('apiBase') ??
   (IS_LOCAL ? `http://localhost:5001${PREFIX}` : null) ??
   (window.__BOO_KING_KING_API_HOST__ ? window.__BOO_KING_KING_API_HOST__ + PREFIX : null) ??
   '';

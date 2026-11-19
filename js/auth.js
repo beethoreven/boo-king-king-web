@@ -7,12 +7,13 @@
  * 最糟的觸發時機就是玩家填完資料按下送出的那一刻。
  */
 
-import { api, setToken, getToken } from './api.js';
+import { api, setToken, getToken, devParam } from './api.js';
 
 // Google OAuth 用戶端 ID。部署時由 index.html 的 window.__GOOGLE_CLIENT_ID__
-// 提供，本機開發可以用 ?googleClientId= 覆寫。
+// 提供，本機開發可以用 ?googleClientId= 覆寫——只在本機有效，正式站不讀這個
+// 參數（理由見 api.js 的 devParam）。
 const CLIENT_ID =
-  new URLSearchParams(window.location.search).get('googleClientId') ??
+  devParam('googleClientId') ??
   window.__GOOGLE_CLIENT_ID__ ??
   '';
 
