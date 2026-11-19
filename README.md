@@ -9,13 +9,34 @@
 python3 -m http.server 5173
 ```
 
-然後開 **http://localhost:5173/?apiBase=http://localhost:5001**
+然後開 **http://localhost:5173/**
 
-`?apiBase=` 不能省。前端預設把 API 打到同一個 origin（正式環境是這樣沒錯），
-本機開發時後端在 5001、前端在 5173，不覆寫的話請求會打到 5173 自己身上，
-症狀是登入畫面卡住或整排 404——看起來像登入壞了，其實是打錯位址。
+在 localhost 開的頁面，API 預設打 `http://localhost:5001/v/<店家識別>`（店家識別是
+`index.html` 的 `__BOO_KING_KING_VARIANT__`），後端照預設的 5001 起就不用帶任何參數。
+後端在別的位址時用 `?apiBase=` 覆寫，值要自己帶上 `/v/<店家識別>`：
+
+```
+http://localhost:5173/?apiBase=http://localhost:5002/v/tutor-arthur-demo
+```
+
+★ `?apiBase=` 與 `?googleClientId=` **只在本機有效**（主機名稱是 `localhost`、
+  `127.0.0.1` 或 `[::1]`）。正式站不讀這兩個參數：網址參數是任何人都能寫進連結裡的，
+  而這一頁會把登入憑證附在每個請求上。細節見 `js/api.js` 的 `devParam`。
 
 後端要另外起，見 boo-king-king-backend 的 README。
+
+## 測試
+
+```bash
+node --test
+```
+
+用 Node 內建的測試執行器，不必安裝任何套件（在 Node 24 上跑過）。目前只有一組：
+`tests/dev-params.test.mjs`，確認上面那條「只在本機有效」。
+
+★ 這個 repo 沒有 `package.json`，Node 是從語法判斷 `js/` 底下的檔案是 ES module。
+  把這個判斷關掉（`--no-experimental-detect-module`）實測會在載入那一步就失敗，
+  所以沒有這個判斷的舊版 Node 跑不了這組測試。
 
 ## 檔案結構
 
