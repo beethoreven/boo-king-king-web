@@ -1,0 +1,24 @@
+# Cloudflare 靜態站的回應標頭（見 https://developers.cloudflare.com/workers/static-assets/headers/）。
+# 所有店家分支共用這一份。
+#
+# Content-Security-Policy：限制頁面能從哪裡載入程式、能把資料送到哪裡。就算哪天頁面
+# 被塞進一段惡意程式，它也沒辦法把登入憑證送到別的主機，因為 connect-src 只列了：
+#   - 自家的兩個後端（各店共用的 boo-king-king-api，與 demo 自己的那一個）
+#   - Google 登入元件需要的 https://accounts.google.com/gsi/（Google 文件列的四條：
+#     script-src、frame-src、connect-src、style-src）
+# img-src 也列了後端：簡介頁的封面與角色圖是從後端直接載的。blob: 是管理員編輯簡介頁時，
+# 上傳前先在瀏覽器裡預覽的圖。
+#
+# ★ script-src 沒有 'unsafe-inline'：頁面裡不能有直接寫在 HTML 裡的程式。每家店的設定
+#   因此寫成 index.html 裡的 JSON，由 js/site-config.js 讀出來。
+# ★ style-src 有 'unsafe-inline'：畫面上有不少元素是在程式裡直接設 style 屬性的
+#   （例如 style: 'margin-top:8px'），拿掉的話那些版面會跑掉。樣式被注入的風險遠小於程式。
+# ★ 新的後端主機要加進 connect-src 與 img-src，否則那家店的頁面打不了任何 API
+#   （tests/site-config.test.mjs 會比對 index.html 寫的主機）。
+# ★ 本機開發用 python3 -m http.server，不套這些標頭。用 wrangler dev 預覽時會套，
+#   這時頁面打的本機後端（localhost:5001）不在 connect-src 裡，會被擋下。
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src https://fonts.gstatic.com; img-src 'self' blob: https://boo-king-king-api.onrender.com https://boo-king-king-tutor-arthur-demo.onrender.com; connect-src 'self' https://boo-king-king-api.onrender.com https://boo-king-king-tutor-arthur-demo.onrender.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
