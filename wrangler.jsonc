@@ -18,8 +18,8 @@
   "compatibility_date": "2026-08-31",
 
   // 整個 repo 根目錄就是網站內容，index.html 在根目錄。
-  // 附帶效果：README.md 之類的檔案也會被公開在網站上（例如 /README.md）。
-  // 這裡沒有機密，所以可以接受；哪天有不該公開的檔案再改成獨立目錄。
+  // ★ 所以根目錄裡的每一個檔案預設都會變成公開網址。不該公開的（.git、README.md、
+  //   這個檔案本身、tests/）列在 .assetsignore；新增的檔案若不是網站要用的，也要加進去。
   "assets": {
     "directory": "./",
 

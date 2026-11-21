@@ -3,3 +3,5 @@ node_modules/
 dist/
 build/
 .DS_Store
+# wrangler dev（本機預覽 Cloudflare 的行為）留下的快取與狀態。
+.wrangler/
