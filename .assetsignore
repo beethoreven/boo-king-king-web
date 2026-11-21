@@ -1,0 +1,15 @@
+# 部署時不上傳成網站檔案的東西（語法同 .gitignore）。
+#
+# 這個 repo 的根目錄就是網站的根目錄（wrangler.jsonc 的 assets.directory），沒列在
+# 這裡的檔案都會變成公開網址——包括 git 的內部資料夾：沒有這一份之前，
+# /.git/config、/.git/HEAD、/README.md、/wrangler.jsonc 都是任何人打得開的網址。
+#
+# ★ _headers 與 _redirects 不用列：它們是 Cloudflare 讀的設定檔，本來就不會變成網址。
+.git
+.gitignore
+.assetsignore
+.DS_Store
+.wrangler
+README.md
+wrangler.jsonc
+tests
