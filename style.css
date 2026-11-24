@@ -692,6 +692,10 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 /* 表格在窄畫面會超出去，讓它自己橫向捲，不要把整頁撐寬。 */
 .doc__scroll { overflow-x: auto; }
 .doc__updated { font-size: 13px; color: var(--ink-faint); margin: 32px 0 0; }
+/* 頁面標題那一段。寫成 class 而不是 style 屬性：這兩頁的 CSP 不准行內樣式。
+   ★ .doc-head 要排在 .section 後面：兩個一樣具體，後寫的才蓋得過 padding-top。 */
+.doc-head { padding-top: 32px; }
+.doc-head__title { font-size: 20px; font-weight: 700; margin: 0; }
 
 /* 破壞性動作的按鈕。紅底白字——它跟旁邊那顆「編輯」的後果不是同一個
    量級，長得一樣會被順手按到。 */

@@ -2,6 +2,18 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <!-- 這一頁自己的 CSP，照它實際載入的東西開到最小：本站的 style.css 與圖片、
+       Google Fonts 的樣式表與字型檔。這一頁沒有程式，default-src 'none' 把程式、
+       連線、內嵌框架全部擋掉。
+
+       ★ 要排在所有載入資源的元素前面：meta 的 CSP 只管它後面的元素。
+       ★ 正式站另外還有 _headers 的 CSP 標頭（全站共用，比這份寬）。兩份同時生效，
+         只有兩份都放行的東西載得進來，所以這一頁要多載入什麼，兩份都要加。
+       ★ 不准行內樣式：版面寫成 style.css 裡的 class，不要用 style 屬性。
+       ★ frame-ancestors 寫在 meta 裡無效。防止被別的網站內嵌，靠的是 _headers 的
+         frame-ancestors 與 X-Frame-Options。
+       tests/doc-pages.test.mjs 會檢查這幾條。 -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>使用者條款 — 步經徑</title>
   <link rel="icon" type="image/png" href="favicon.png">
@@ -26,8 +38,8 @@
     </div>
 
     <div class="view">
-      <div class="section" style="padding-top:32px">
-        <h1 style="font-size:20px;font-weight:700;margin:0">使用者條款</h1>
+      <div class="section doc-head">
+        <h1 class="doc-head__title">使用者條款</h1>
       </div>
 
       <div class="section">
