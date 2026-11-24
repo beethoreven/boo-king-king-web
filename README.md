@@ -31,8 +31,13 @@ http://localhost:5173/?apiBase=http://localhost:5002/v/tutor-arthur-demo
 node --test
 ```
 
-用 Node 內建的測試執行器，不必安裝任何套件（在 Node 24 上跑過）。目前只有一組：
-`tests/dev-params.test.mjs`，確認上面那條「只在本機有效」。
+用 Node 內建的測試執行器，不必安裝任何套件（在 Node 24 上跑過）。`tests/` 底下：
+
+- `dev-params.test.mjs`：上面那條「只在本機有效」。
+- `site-config.test.mjs`：`index.html`、`_headers`、`.assetsignore` 三份對得上。每條店家分支的
+  `index.html` 不一樣，所以每條分支都要跑。
+- `doc-pages.test.mjs`：`privacy.html`、`terms.html` 自己的 meta CSP 有該有的限制，也沒有擋到
+  頁面自己要載入的東西。
 
 ★ 這個 repo 沒有 `package.json`，Node 是從語法判斷 `js/` 底下的檔案是 ES module。
   把這個判斷關掉（`--no-experimental-detect-module`）實測會在載入那一步就失敗，
